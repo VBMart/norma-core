@@ -15,9 +15,9 @@ from .errors import ErrNotConnected, ErrRequestTimeout, \
 from target.gen_python.protobuf.normfs import normfs as normfs_pb2
 
 try:
-    from target.gen_python.protobuf.station.commands import commands_pb2
+    from target.gen_python.protobuf.station import commands
 except ImportError:
-    commands_pb2 = None
+    commands = None
 
 @dataclass
 class StreamEntryId:
@@ -483,19 +483,24 @@ def new_station_client(server: str, logger, loop: Optional[asyncio.AbstractEvent
     return client
 
 
-def send_commands(client: Client, commands: List) -> None:
+def send_commands(client: Client, command_list: List) -> None:
     """
     Send commands to the station using EnqueuePack.
 
     Args:
         client: StationClient instance
-        commands: List of DriverCommand protobuf messages
+        command_list: List of DriverCommand protobuf messages
 
     Raises:
         Exception: If commands protobuf is not available or enqueue fails
     """
-    if commands_pb2 is None:
-        raise ImportError("commands_pb2 module not available - generate protobufs first")
+    if commands is None:
+        raise ImportError("commands module not available - generate protobufs first")
 
-    data = [cmd.SerializeToString() for cmd in commands]
-    client.enqueue_pack("commands", data)
+    # Wrap commands in StationCommandsPack
+    commands_pack = commands.StationCommandsPack(
+        commands=command_list
+    )
+
+    # Encode the pack and send it as a single packet
+    client.enqueue("commands", commands_pack.encode())

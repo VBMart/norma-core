@@ -228,7 +228,7 @@ const St3215BusCalibrationPage: React.FC = () => {
             )}
             {isLowVoltage && hasValidMotors && (
               <div className="px-4 py-2 bg-yellow-900/30 border border-yellow-600 rounded text-yellow-400">
-                ⚠️ Low voltage detected ({(minVoltage / 10).toFixed(1)}V). Calibration may fail or produce inaccurate results. Recommended: 7.0V.
+                ⚠️ Low voltage detected ({(minVoltage / 10).toFixed(1)}V). Auto calibration may fail or produce inaccurate results. Recommended: 7.0V.
               </div>
             )}
             {calibrationState && calibrationState.status !== st3215.AutoCalibrationState.Status.IDLE && (
@@ -249,7 +249,11 @@ const St3215BusCalibrationPage: React.FC = () => {
                     <span className="text-gray-400 italic">{calibrationState.currentPhase}</span>
                   )}
                   {calibrationState.errorMessage && (
-                    <span className="text-red-400">{calibrationState.errorMessage}</span>
+                    <span className="text-red-400">
+                      {calibrationState.errorMessage}
+                      {calibrationState.status === st3215.AutoCalibrationState.Status.FAILED &&
+                        '. Try again or Reset and use manual calibration'}
+                    </span>
                   )}
                 </div>
               </div>
@@ -277,9 +281,9 @@ const St3215BusCalibrationPage: React.FC = () => {
                   <button
                     onClick={confirmFreeze}
                     disabled={isSavePending}
-                    className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-500 transition-colors"
+                    className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-500 transition-colors"
                   >
-                    {isSavePending ? <ButtonLoadingLabel label="Saving..." /> : 'Save'}
+                    {isSavePending ? <ButtonLoadingLabel label="Saving..." /> : 'Done'}
                   </button>
                 </div>
               </div>

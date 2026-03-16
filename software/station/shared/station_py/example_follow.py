@@ -152,6 +152,8 @@ async def process_inference_entries():
                                     for motor_state in motors:
                                         motor_id = motor_state.get_id()
                                         state_bytes = motor_state.get_state()
+                                        range_min = motor_state.get_range_min()
+                                        range_max = motor_state.get_range_max()
 
                                         if state_bytes:
                                             motor_data = parse_motor_state(state_bytes)
@@ -160,7 +162,8 @@ async def process_inference_entries():
                                                   f"pos={motor_data['position']:4d}, "
                                                   f"current={motor_data['current']:4d}mA, "
                                                   f"temp={motor_data['temperature']:3d}°C, "
-                                                  f"voltage={motor_data['voltage']:4.1f}V")
+                                                  f"voltage={motor_data['voltage']:4.1f}V, "
+                                                  f"range=[{range_min:4d}, {range_max:4d}]")
                                         else:
                                             print(f"  Motor {motor_id:2d}: (no state data)")
                                 else:

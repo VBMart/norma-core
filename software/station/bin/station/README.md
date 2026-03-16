@@ -4,11 +4,82 @@ Physical operations platform for robotics - real-time data collection, inference
 
 ## 🚀 Quick Start
 
+### Linux: USB Access Setup
+
+On Linux, you need to add your user to the `dialout` group to access USB devices (servos, cameras, etc.) without sudo:
+
+```bash
+sudo usermod -a -G dialout $USER
+```
+
+Then **log out and log back in** for the group change to take effect.
+
+### Running Station
+
 ```bash
 station --web --tcp
 ```
 
 Open your browser at **http://localhost:8889** to see the web interface.
+
+## 🐍 Python Examples
+
+Control your robots with just a few lines of Python - **no dependencies needed!**
+
+### 1. Subscribe to ST3215 Motor State Updates
+
+Real-time access to **ALL motor registers** - complete raw state for every motor:
+
+- **Full register dump** - All bytes of motor memory
+- **Parse any register** - Position, current, temperature, voltage, torque limits, PIDs, etc.
+- **Calibrated ranges** - Min/max from calibration for safe control
+- **Bus metadata** - Serial number, latency, system timestamps
+- **Live updates** - Subscribe over tcp
+
+```python
+from station_py import new_station_client
+from target.gen_python.protobuf.drivers.st3215 import st3215
+
+client = new_station_client("localhost", logger)
+client.follow("st3215/inference", entries_queue)
+
+# Raw access to complete motor state:
+# motor.get_state() -> bytes  # ALL registers!
+# Parse any register at any address - you have full control
+```
+
+![ST3215 Motor State Monitor](../../shared/station_py/images/image.png)
+
+### 2. Send Commands to Motors
+
+Control motor positions with calibrated ranges:
+
+```python
+from station_py import new_station_client, send_commands
+from target.gen_python.protobuf.station import commands, drivers
+from target.gen_python.protobuf.drivers.st3215 import st3215
+
+client = new_station_client("localhost", logger)
+
+# Move motor to position
+st3215_cmd = st3215.Command(
+    target_bus_serial="YOUR_BUS_SERIAL",
+    write=st3215.ST3215WriteCommand(
+        motor_id=1,
+        address=0x2A,  # Target position register
+        value=(2000).to_bytes(2, byteorder='little')
+    )
+)
+
+cmd = commands.DriverCommand(
+    type=drivers.StationCommandType.STC_ST3215_COMMAND,
+    body=st3215_cmd.encode()
+)
+
+send_commands(client, [cmd])
+```
+
+**See full examples:** [station_py/example_follow.py](../../shared/station_py/example_follow.py) and [station_py/example_commands.py](../../shared/station_py/example_commands.py)
 
 ## ✨ Features
 
