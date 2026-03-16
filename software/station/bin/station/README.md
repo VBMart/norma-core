@@ -40,8 +40,8 @@ Open your browser at **http://localhost:8889** to see the web interface.
 |  | IP Cameras | 🚧 Work in Progress |
 |  | Waveshare RoArm-M2 | 📋 Planned |
 |  | Yahboom ROSMASTER X3 | 📋 Planned |
-| **Client Libraries** | Python | 🔜 Coming Soon |
-|  | Golang | 🔜 Coming Soon |
+| **Client Libraries** | Golang | 🚧 Work in Progress ([demo available](../../shared/station/)) |
+|  | Python | 🚧 Work in Progress |
 |  | JavaScript | 📋 Planned |
 |  | TypeScript | 📋 Planned |
 | **Robotics Frameworks** | ROS | 📋 Planned |
