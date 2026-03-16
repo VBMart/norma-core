@@ -2,6 +2,27 @@
 
 Physical operations platform for robotics - real-time data collection, inference integration, and robot control.
 
+## 📥 Download
+
+**Latest Release: v0.1.0-beta.0**
+
+Download pre-built binaries from the [releases page](https://github.com/norma-core/norma-core/releases):
+
+- **Linux ARM64** (Raspberry Pi): `station-linux-aarch64.tar.gz`
+- **Linux AMD64** (Intel/AMD): `station-linux-x86_64.tar.gz`
+- **macOS ARM64** (Apple Silicon): `station-macos-arm64.zip`
+
+Extract and run:
+```bash
+# Linux
+tar -xzf station-linux-*.tar.gz
+./station --web --tcp
+
+# macOS
+unzip station-macos-arm64.zip
+./station --web --tcp
+```
+
 ## 🚀 Quick Start
 
 ### Linux: USB Access Setup
