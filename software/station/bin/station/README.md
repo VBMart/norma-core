@@ -44,6 +44,7 @@ Open your browser at **http://localhost:8889** to see the web interface.
 |  | Golang | 🔜 Coming Soon |
 |  | JavaScript | 📋 Planned |
 |  | TypeScript | 📋 Planned |
+| **Robotics Frameworks** | ROS | 📋 Planned |
 
 **Want support for your robot?** [Open an issue](https://github.com/norma-core/norma-core/issues) with your device details!
 
