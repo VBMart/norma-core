@@ -103,15 +103,15 @@ send_commands(client, [cmd])
 |  | Linux | ✅ Supported |
 |  | Windows | 📋 Planned |
 |  | FreeBSD | 📋 Planned |
-| **Devices** | [UVC USB Cameras](../../../../drivers/usbvideo) | ✅ Done |
-|  | [SO101](../../../../drivers/st3215) | ✅ Done |
-|  | [ElRobot](../../../../drivers/st3215) | ✅ Done |
+| **Devices** | [UVC USB Cameras](../../../drivers/usbvideo) | ✅ Done |
+|  | [SO101](../../../drivers/st3215) | ✅ Done |
+|  | [ElRobot](../../../drivers/st3215) | ✅ Done |
 |  | OpenArm | 🚧 Work in Progress |
 |  | Yahboom Dogzilla | 🚧 Work in Progress |
 |  | IP Cameras | 🚧 Work in Progress |
 |  | Waveshare RoArm-M2 | 📋 Planned |
 |  | Yahboom ROSMASTER X3 | 📋 Planned |
-| **Client Libraries** | Golang | 🚧 Work in Progress ([demo available](../../shared/station/)) |
+| **Client Libraries** | Golang | 🚧 Work in Progress ([examples available](../../shared/station/)) |
 |  | Python | 🚧 Work in Progress ([examples available](../../shared/station_py/)) |
 |  | JavaScript | 📋 Planned |
 |  | TypeScript | 📋 Planned |
