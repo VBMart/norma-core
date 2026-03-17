@@ -144,9 +144,9 @@ fn default_st3215_bus() -> String {
 impl Inference {
     /// Create a default normvla inference configuration
     pub fn default_normvla() -> Self {
-        // Use OS-appropriate path: /var/run for Linux, /tmp for macOS
+        // Use OS-appropriate path: /dev/shm for Linux (tmpfs, world-writable), /tmp for macOS
         let shm_path = if cfg!(target_os = "linux") {
-            PathBuf::from("/var/run/normvla")
+            PathBuf::from("/dev/shm/normvla")
         } else {
             PathBuf::from("/tmp/normvla")
         };

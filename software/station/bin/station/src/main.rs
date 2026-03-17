@@ -435,12 +435,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         log::info!("TCP server shut down.");
     }
 
-    station.shutdown().await?;
-
-    log::info!("Data persisted at: {:?}", args.normfs_base_folder);
     if let Some(inference) = station.engine.inference.lock().as_ref() {
         inference.shutdown();
     }
 
+    station.shutdown().await?;
+
+    log::info!("Data persisted at: {:?}", args.normfs_base_folder);
+    
     Ok(())
 }
