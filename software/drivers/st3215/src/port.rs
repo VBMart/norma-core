@@ -165,6 +165,23 @@ impl St3215Port {
                         break;
                     }
 
+                    // Check if this is a motor ID change command
+                    // We'll clear the old motor state AFTER sending the command result
+                    let motor_id_to_clear = if let Some(write_cmd) = &command.write {
+                        if write_cmd.address == protocol::EepromRegister::ID.address() as u32 && !write_cmd.value.is_empty() {
+                            let old_motor_id = write_cmd.motor_id as u8;
+                            info!(
+                                "Motor ID change detected - will clear state for old motor ID {} after command completes",
+                                old_motor_id
+                            );
+                            Some(old_motor_id)
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    };
+
                     if command.reset.is_some() || command.reg_write.is_some() {
                         let mut cache = eeprom_cache.lock();
                         cache.remove(&(motor_id as u8));
@@ -204,6 +221,15 @@ impl St3215Port {
                                 }
                             }
                         }
+                    }
+
+                    // Now clear the old motor ID state AFTER command result is sent
+                    if let Some(old_motor_id) = motor_id_to_clear {
+                        info!("Clearing state for old motor ID {}", old_motor_id);
+                        if Self::send_drive_disconnect_envelope(&com, &bus_info, old_motor_id).is_err() {
+                            warn!("Failed to send disconnect signal for old motor ID {}", old_motor_id);
+                        }
+                        eeprom_cache.lock().remove(&old_motor_id);
                     }
                 }
                 _ = interval.tick() => {

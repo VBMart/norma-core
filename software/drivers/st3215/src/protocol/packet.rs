@@ -1,3 +1,5 @@
+use std::io;
+
 use super::error::Error;
 
 use bytes::{BufMut, Bytes, BytesMut};
@@ -319,6 +321,17 @@ impl ST3215Response {
         }
 
         let full_packet = reply_buffer.freeze();
+
+        if full_packet.len() < 6 {
+            return Err(Error::Io {  
+                error: io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("Invalid packet length: expected at least 6 bytes, got {}", full_packet.len())
+                ),
+                source_packet,
+            });
+        }
+
         let response_data = full_packet.slice(5..full_packet.len() - 1);
         let received_checksum = full_packet[full_packet.len() - 1];
 
