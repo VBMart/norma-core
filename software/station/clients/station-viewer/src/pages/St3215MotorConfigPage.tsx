@@ -25,6 +25,7 @@ const St3215MotorConfigPage: React.FC = () => {
   const [newMotorId, setNewMotorId] = useState<number>(1);
   const [motorIdSetProgress, setMotorIdSetProgress] = useState<MotorIdSetProgress>(MotorIdSetProgress.IDLE);
   const [commandLog, setCommandLog] = useState<string[]>([]);
+  const [motorIdSetStartTime, setMotorIdSetStartTime] = useState<number>(0);
 
   // Derive selected bus from inference state, falling back to router state
   const selectedBus = useMemo(() => {
@@ -38,8 +39,8 @@ const St3215MotorConfigPage: React.FC = () => {
     return updatedBus || selectedBusFromState;
   }, [inferenceState?.st3215?.data.buses, selectedBusFromState]);
 
-  // Monitor bus state for collision detection
-  const busStatus = useBusMonitor(selectedBus);
+  // Monitor bus state for collision detection (ignore errors during motor ID change)
+  const busStatus = useBusMonitor(selectedBus, isMotorIdSetInProgress);
 
   // Monitor for new motor ID appearance during ID change sequence
   useEffect(() => {
@@ -152,6 +153,7 @@ const St3215MotorConfigPage: React.FC = () => {
     setIsMotorIdSetInProgress(true);
     setCommandLog([]);
     setMotorIdSetProgress(MotorIdSetProgress.UNLOCKING);
+    setMotorIdSetStartTime(Date.now());
 
     try {
       console.log(`Starting motor ID setting from ${currentMotorId} to ${newMotorId} on bus ${busSerial}`);
@@ -220,8 +222,8 @@ const St3215MotorConfigPage: React.FC = () => {
             </h1>
           </div>
 
-          {/* Priority 1: Show error dump if error detected (but not during motor ID change) */}
-          {busStatus.errorDump && !isMotorIdSetInProgress ? (
+          {/* Priority 1: Show error dump if error detected (but not during or after recent motor ID change) */}
+          {busStatus.errorDump && !isMotorIdSetInProgress && (Date.now() - motorIdSetStartTime > 1000) ? (
             <div className="space-y-6">
               <div className="bg-orange-900 border border-orange-600 rounded-lg p-6">
                 <div className="flex items-start gap-3">
@@ -297,8 +299,8 @@ const St3215MotorConfigPage: React.FC = () => {
                 </div>
               </div>
             </div>
-          ) : /* Priority 2: Show multiple motors warning */
-          busStatus.motorsCount > 1 ? (
+          ) : /* Priority 2: Show multiple motors warning (but not during or after recent motor ID change) */
+          busStatus.motorsCount > 1 && !isMotorIdSetInProgress && (Date.now() - motorIdSetStartTime > 1000) ? (
             <div className="space-y-6">
               <div className="bg-orange-900 border border-orange-600 rounded-lg p-6">
                 <div className="flex items-start gap-3">
