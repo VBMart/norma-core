@@ -60,15 +60,19 @@ Real-time access to **ALL motor registers** - complete raw state for every motor
 - **Live updates** - Subscribe over tcp
 
 ```python
+import asyncio
 from station_py import new_station_client
 from target.gen_python.protobuf.drivers.st3215 import st3215
 
-client = new_station_client("localhost", logger)
-client.follow("st3215/inference", entries_queue)
+async def main():
+    client = await new_station_client("localhost", logger)
+    client.follow("st3215/inference", entries_queue)
 
-# Raw access to complete motor state:
-# motor.get_state() -> bytes  # ALL registers!
-# Parse any register at any address - you have full control
+    # Raw access to complete motor state:
+    # motor.get_state() -> bytes  # ALL registers!
+    # Parse any register at any address - you have full control
+
+asyncio.run(main())
 ```
 
 ![ST3215 Motor State Monitor](../../shared/station_py/images/image.png)
@@ -78,28 +82,32 @@ client.follow("st3215/inference", entries_queue)
 Control motor positions with calibrated ranges:
 
 ```python
+import asyncio
 from station_py import new_station_client, send_commands
 from target.gen_python.protobuf.station import commands, drivers
 from target.gen_python.protobuf.drivers.st3215 import st3215
 
-client = new_station_client("localhost", logger)
+async def main():
+    client = await new_station_client("localhost", logger)
 
-# Move motor to position
-st3215_cmd = st3215.Command(
-    target_bus_serial="YOUR_BUS_SERIAL",
-    write=st3215.ST3215WriteCommand(
-        motor_id=1,
-        address=0x2A,  # Target position register
-        value=(2000).to_bytes(2, byteorder='little')
+    # Move motor to position
+    st3215_cmd = st3215.Command(
+        target_bus_serial="YOUR_BUS_SERIAL",
+        write=st3215.ST3215WriteCommand(
+            motor_id=1,
+            address=0x2A,  # Target position register
+            value=(2000).to_bytes(2, byteorder='little')
+        )
     )
-)
 
-cmd = commands.DriverCommand(
-    type=drivers.StationCommandType.STC_ST3215_COMMAND,
-    body=st3215_cmd.encode()
-)
+    cmd = commands.DriverCommand(
+        type=drivers.StationCommandType.STC_ST3215_COMMAND,
+        body=st3215_cmd.encode()
+    )
 
-send_commands(client, [cmd])
+    await send_commands(client, [cmd])
+
+asyncio.run(main())
 ```
 
 **See full examples:** [station_py/example_follow.py](../../shared/station_py/example_follow.py) and [station_py/example_commands.py](../../shared/station_py/example_commands.py)

@@ -38,7 +38,7 @@ class QueueRead:
 
 
 class Client:
-    def __init__(self, addr: str, logger, loop: Optional[asyncio.AbstractEventLoop] = None):
+    def __init__(self, addr: str, logger):
         self.addr = addr
         self.logger = logger
         self.conn: Optional[socket.socket] = None
@@ -47,12 +47,6 @@ class Client:
         self.connected = False
         self.setup_done = False
         self.lock = threading.Lock()
-        if loop is not None:
-            self.loop = loop
-        else:
-            self.loop = asyncio.new_event_loop()
-            self.thread = threading.Thread(target=self.run_event_loop, daemon=True)
-            self.thread.start()
 
         self.c2s = asyncio.Queue(maxsize=1024)
         self.s2c = asyncio.Queue(maxsize=1024)
@@ -68,23 +62,22 @@ class Client:
         self.last_msg_sent_time = 0
         self.ping_sequence = 0
 
-        asyncio.run_coroutine_threadsafe(self.manage_connection(), self.loop)
+        # Start connection management as a task in the provided loop
+        asyncio.create_task(self.manage_connection())
 
-    def wait_ready(self, timeout: Optional[float] = None):
+    async def wait_ready(self, timeout: Optional[float] = None):
         """
         Waits until the client is connected and setup is done.
         """
-        future = asyncio.run_coroutine_threadsafe(self._wait_ready_async(), self.loop)
-        return future.result(timeout)
-
-    async def _wait_ready_async(self):
-        while not self.setup_done:
-            await asyncio.sleep(0.1)
-
-    def run_event_loop(self):
-        if not self.loop.is_running():
-            asyncio.set_event_loop(self.loop)
-            self.loop.run_forever()
+        if timeout:
+            start = asyncio.get_event_loop().time()
+            while not self.setup_done:
+                if asyncio.get_event_loop().time() - start > timeout:
+                    raise TimeoutError("Client setup timed out")
+                await asyncio.sleep(0.1)
+        else:
+            while not self.setup_done:
+                await asyncio.sleep(0.1)
 
     async def manage_connection(self):
         while True:
@@ -222,9 +215,8 @@ class Client:
         self.setup_done = False
         self.logger.info("Connection closed")
 
-    def enqueue(self, queue_id: str, data: bytes) -> bytes:
-        future = asyncio.run_coroutine_threadsafe(self._enqueue(queue_id, data), self.loop)
-        return future.result()
+    async def enqueue(self, queue_id: str, data: bytes) -> bytes:
+        return await self._enqueue(queue_id, data)
 
     async def _enqueue(self, queue_id: str, data: bytes) -> bytes:
         if not self.connected or not self.setup_done:
@@ -265,9 +257,8 @@ class Client:
             with self.pending_writes_lock:
                 del self.pending_writes[write_id]
 
-    def enqueue_pack(self, queue_id: str, data: List[bytes]) -> List[bytes]:
-        future = asyncio.run_coroutine_threadsafe(self._enqueue_pack(queue_id, data), self.loop)
-        return future.result()
+    async def enqueue_pack(self, queue_id: str, data: List[bytes]) -> List[bytes]:
+        return await self._enqueue_pack(queue_id, data)
 
     async def _enqueue_pack(self, queue_id: str, data: List[bytes]) -> List[bytes]:
         if not self.connected or not self.setup_done:
@@ -324,7 +315,7 @@ class Client:
         data_channel = asyncio.Queue(maxsize=buf_size if buf_size > 0 else 1)
         qr = QueueRead(stream_uuid, data_channel)
 
-        asyncio.run_coroutine_threadsafe(self._read_async(qr, queue_id, offset, positive, limit, step, buf_size), self.loop)
+        asyncio.create_task(self._read_async(qr, queue_id, offset, positive, limit, step, buf_size))
         return qr
 
     async def _read_async(self, qr: QueueRead, queue_id: str, offset: bytes, positive: bool, limit: int, step: int, buf_size: int):
@@ -388,7 +379,7 @@ class Client:
                 if not response or not response.get_read():
                     qr.err = ErrReadStreamClosed
                     return
-                
+
                 read_resp = response.get_read()
                 result = read_resp.get_result()
 
@@ -435,10 +426,7 @@ class Client:
             asyncio.Queue where errors will be sent (if any occur)
         """
         error_queue = asyncio.Queue(maxsize=1)
-        asyncio.run_coroutine_threadsafe(
-            self._follow_async(queue_id, target, error_queue),
-            self.loop
-        )
+        asyncio.create_task(self._follow_async(queue_id, target, error_queue))
         return error_queue
 
     async def _follow_async(self, queue_id: str, target: asyncio.Queue, error_queue: asyncio.Queue):
@@ -462,14 +450,13 @@ class Client:
 StationClient = Client
 
 
-def new_station_client(server: str, logger, loop: Optional[asyncio.AbstractEventLoop] = None) -> StationClient:
+async def new_station_client(server: str, logger) -> StationClient:
     """
     Create a new StationClient with default port 8888 if not specified.
 
     Args:
         server: Server address (e.g., "localhost" or "localhost:8888")
         logger: Logger instance
-        loop: Optional event loop (will create one if not provided)
 
     Returns:
         StationClient instance
@@ -478,12 +465,12 @@ def new_station_client(server: str, logger, loop: Optional[asyncio.AbstractEvent
     if ':' not in server:
         addr = f"{server}:8888"
 
-    client = Client(addr, logger, loop)
-    client.wait_ready(timeout=10.0)
+    client = Client(addr, logger)
+    await client.wait_ready(timeout=10.0)
     return client
 
 
-def send_commands(client: Client, command_list: List) -> None:
+async def send_commands(client: Client, command_list: List) -> None:
     """
     Send commands to the station using EnqueuePack.
 
@@ -503,4 +490,4 @@ def send_commands(client: Client, command_list: List) -> None:
     )
 
     # Encode the pack and send it as a single packet
-    client.enqueue("commands", commands_pack.encode())
+    await client.enqueue("commands", commands_pack.encode())

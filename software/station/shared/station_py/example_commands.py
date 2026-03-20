@@ -68,7 +68,7 @@ def parse_position(state_bytes: memoryview) -> int:
     return 0
 
 
-def move_motors(client, position: int):
+async def move_motors(client, position: int):
     """Move all first servos on all buses to target position."""
     global buses_info
 
@@ -120,7 +120,7 @@ def move_motors(client, position: int):
         logger.warning(f"⚠ Skipping command - {warning}")
 
     if command_list:
-        send_commands(client, command_list)
+        await send_commands(client, command_list)
         logger.info(f"→ Moving {len(command_list)} servo(s) to position {position}")
     elif skipped:
         logger.error("❌ No commands sent - all motors need calibration!")
@@ -255,7 +255,7 @@ async def input_handler(client):
                     if range_min > 0 or range_max > 0:
                         # Map 0-1 to range_min - range_max
                         target_pos = int(range_min + (range_max - range_min) * position_normalized)
-                        move_motors(client, target_pos)
+                        await move_motors(client, target_pos)
                         break  # Only need to calculate once since move_motors handles all buses
 
             except ValueError:
@@ -271,7 +271,7 @@ async def main_async():
 
     # Connect to station
     logger.info("Connecting to station...")
-    client = new_station_client("localhost", logger)
+    client = await new_station_client("localhost", logger)
     logger.info("Connected!")
 
     # Run state subscriber and input handler concurrently

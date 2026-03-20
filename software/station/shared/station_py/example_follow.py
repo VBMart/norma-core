@@ -98,7 +98,7 @@ async def process_inference_entries():
 
     try:
         # Create client (will auto-connect to localhost:8888)
-        client = new_station_client("localhost", logger)
+        client = await new_station_client("localhost", logger)
 
         # Start following the queue
         error_queue = client.follow("st3215/inference", entries_queue)
