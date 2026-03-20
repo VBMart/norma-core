@@ -325,6 +325,18 @@ class SO101Calibrator:
     # Flow control
     # -------------------------------------------------------------------------
 
+    # Define a local helper to handle the repetitive arguments
+    async def run_cmd(self, action_func, motor_id, *args, torque_after=0):
+        await action_func(
+            self.bus_serial,
+            motor_id,
+            *args,
+            torque_after=torque_after,
+            motor_positions=self.motor_positions,
+            speed=MOTOR_SPEEDS[motor_id],
+            accel=MOTOR_ACCELS[motor_id]
+        )
+
     async def run(self):
         """Execute the full SO101 calibration sequence."""
 
@@ -339,31 +351,31 @@ class SO101Calibrator:
         logger.info("=" * 60)
         logger.info("🤖 MOTOR 1 CALIBRATION")
         logger.info("=" * 60)
-        await self.driver.find_max(self.bus_serial, 1, torque_after=0, motor_positions=self.motor_positions, speed=MOTOR_SPEEDS[1], accel=MOTOR_ACCELS[1])
-        await self.driver.find_min(self.bus_serial, 1, torque_after=0, motor_positions=self.motor_positions, speed=MOTOR_SPEEDS[1], accel=MOTOR_ACCELS[1])
-        await self.driver.go_to_float_position(self.bus_serial, 1, 0.5, torque_after=0, motor_positions=self.motor_positions, speed=MOTOR_SPEEDS[1], accel=MOTOR_ACCELS[1])
+        await self.run_cmd(self.driver.find_max, 1, torque_after=0)
+        await self.run_cmd(self.driver.find_min, 1, torque_after=0)
+        await self.run_cmd(self.driver.go_to_float_position, 1, 0.5, torque_after=0)
 
         # Step 4: Motor 2
         logger.info("=" * 60)
         logger.info("🤖 MOTORS 2-6 INITIAL CALIBRATION")
         logger.info("=" * 60)
-        await self.driver.find_min(self.bus_serial, 2, torque_after=0, motor_positions=self.motor_positions, speed=MOTOR_SPEEDS[2], accel=MOTOR_ACCELS[2])
+        await self.run_cmd(self.driver.find_min, 2, torque_after=0)
 
         # Step 5: Motor 3
-        await self.driver.find_max(self.bus_serial, 3, torque_after=0, motor_positions=self.motor_positions, speed=MOTOR_SPEEDS[3], accel=MOTOR_ACCELS[3])
+        await self.run_cmd(self.driver.find_max, 3, torque_after=0)
 
         # Steps 6-8: Motor 4
-        await self.driver.find_max(self.bus_serial, 4, torque_after=0, motor_positions=self.motor_positions, speed=MOTOR_SPEEDS[4], accel=MOTOR_ACCELS[4])
-        await self.driver.find_min(self.bus_serial, 4, torque_after=0, motor_positions=self.motor_positions, speed=MOTOR_SPEEDS[4], accel=MOTOR_ACCELS[4])
-        await self.driver.go_to_float_position(self.bus_serial, 4, 0.5, torque_after=1, motor_positions=self.motor_positions, speed=MOTOR_SPEEDS[4], accel=MOTOR_ACCELS[4])
+        await self.run_cmd(self.driver.find_max, 4, torque_after=0)
+        await self.run_cmd(self.driver.find_min, 4, torque_after=0)
+        await self.run_cmd(self.driver.go_to_float_position, 4, 0.5, torque_after=1)
 
         # Steps 9-10: Motor 5
-        await self.driver.find_max(self.bus_serial, 5, torque_after=0, motor_positions=self.motor_positions, speed=MOTOR_SPEEDS[5], accel=MOTOR_ACCELS[5])
-        await self.driver.find_min(self.bus_serial, 5, torque_after=0, motor_positions=self.motor_positions, speed=MOTOR_SPEEDS[5], accel=MOTOR_ACCELS[5])
+        await self.run_cmd(self.driver.find_max, 5, torque_after=0)
+        await self.run_cmd(self.driver.find_min, 5, torque_after=0)
 
         # Steps 11-12: Motor 6
-        await self.driver.find_max(self.bus_serial, 6, torque_after=0, motor_positions=self.motor_positions, speed=MOTOR_SPEEDS[6], accel=MOTOR_ACCELS[6])
-        await self.driver.find_min(self.bus_serial, 6, torque_after=0, motor_positions=self.motor_positions, speed=MOTOR_SPEEDS[6], accel=MOTOR_ACCELS[6])
+        await self.run_cmd(self.driver.find_max, 6, torque_after=0)
+        await self.run_cmd(self.driver.find_min, 6, torque_after=0)
 
         # Step 13: Increase Motor 3 torque for second pass
         logger.info("=" * 60)
@@ -378,42 +390,42 @@ class SO101Calibrator:
 
         # Steps 14-15: Motor 3 second pass
         logger.info("Motor 3: Find minimum")
-        await self.driver.find_min(self.bus_serial, 3, torque_after=1, motor_positions=self.motor_positions, speed=MOTOR_SPEEDS[3], accel=MOTOR_ACCELS[3])
+        await self.run_cmd(self.driver.find_min, 3, torque_after=1)
         logger.info("Motor 3: Shift")
-        await self.driver.shift(self.bus_serial, 3, steps=1500, torque_after=1, motor_positions=self.motor_positions, speed=MOTOR_SPEEDS[3], accel=MOTOR_ACCELS[3])
+        await self.run_cmd(self.driver.shift, 3, steps=1500, torque_after=1)
 
         # Steps 16-18: Motor 4 re-calibrate
         logger.info("=" * 60)
         logger.info("🔄 MOTOR 4 & 2 ADJUSTMENTS")
         logger.info("=" * 60)
-        await self.driver.find_max(self.bus_serial, 4, torque_after=0, motor_positions=self.motor_positions, speed=MOTOR_SPEEDS[4], accel=MOTOR_ACCELS[4])
-        await self.driver.find_min(self.bus_serial, 4, torque_after=0, motor_positions=self.motor_positions, speed=MOTOR_SPEEDS[4], accel=MOTOR_ACCELS[4])
-        await self.driver.go_to_float_position(self.bus_serial, 4, 0.1, torque_after=1, motor_positions=self.motor_positions, speed=MOTOR_SPEEDS[4], accel=MOTOR_ACCELS[4])
+        await self.run_cmd(self.driver.find_max, 4, torque_after=0)
+        await self.run_cmd(self.driver.find_min, 4, torque_after=0)
+        await self.run_cmd(self.driver.go_to_float_position, 4, 0.1, torque_after=1)
 
         # Step 19: Motor 2 shift
-        await self.driver.shift(self.bus_serial, 2, steps=1216, torque_after=1, motor_positions=self.motor_positions, speed=MOTOR_SPEEDS[2], accel=MOTOR_ACCELS[2])
+        await self.run_cmd(self.driver.shift, 2, steps=1216, torque_after=1)
 
         # Steps 20-21: Second pass
         logger.info("=" * 60)
         logger.info("🔁 MOTORS 2 & 3 SECOND PASS")
         logger.info("=" * 60)
-        await self.driver.find_min(self.bus_serial, 3, torque_after=1, motor_positions=self.motor_positions, speed=MOTOR_SPEEDS[3], accel=MOTOR_ACCELS[3])
-        await self.driver.find_max(self.bus_serial, 2, torque_after=1, motor_positions=self.motor_positions, speed=MOTOR_SPEEDS[2], accel=MOTOR_ACCELS[2])
+        await self.run_cmd(self.driver.find_min, 3, torque_after=1)
+        await self.run_cmd(self.driver.find_max, 2, torque_after=1)
 
         # Steps 22-23: Center motors 2 and 3
         logger.info("=" * 60)
         logger.info("🎯 CENTERING MOTORS 2 & 3")
         logger.info("=" * 60)
-        await self.driver.go_to_float_position(self.bus_serial, 2, 0.5, torque_after=1, motor_positions=self.motor_positions, speed=MOTOR_SPEEDS[2], accel=MOTOR_ACCELS[2])
-        await self.driver.go_to_float_position(self.bus_serial, 3, 0.5, torque_after=1, motor_positions=self.motor_positions, speed=MOTOR_SPEEDS[3], accel=MOTOR_ACCELS[3])
+        await self.run_cmd(self.driver.go_to_float_position, 2, 0.5, torque_after=1)
+        await self.run_cmd(self.driver.go_to_float_position, 3, 0.5, torque_after=1)
 
         # Steps 24-26: Final positioning
         logger.info("=" * 60)
         logger.info("🏁 FINAL POSITIONING")
         logger.info("=" * 60)
-        await self.driver.find_min(self.bus_serial, 2, torque_after=0, motor_positions=self.motor_positions, speed=MOTOR_SPEEDS[2], accel=MOTOR_ACCELS[2])
-        await self.driver.find_max(self.bus_serial, 3, torque_after=0, motor_positions=self.motor_positions, speed=MOTOR_SPEEDS[3], accel=MOTOR_ACCELS[3])
-        await self.driver.go_to_float_position(self.bus_serial, 4, 0.7, torque_after=0, motor_positions=self.motor_positions, speed=MOTOR_SPEEDS[4], accel=MOTOR_ACCELS[4])
+        await self.run_cmd(self.driver.find_min, 2, torque_after=0)
+        await self.run_cmd(self.driver.find_max, 3, torque_after=0)
+        await self.run_cmd(self.driver.go_to_float_position, 4, 0.7, torque_after=0)
 
         # # Step 27: Disable torque on all motors
         logger.info("=" * 60)
