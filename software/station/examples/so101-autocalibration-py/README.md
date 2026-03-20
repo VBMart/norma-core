@@ -86,3 +86,38 @@ command_id = self.next_command_id()
 await send_commands(self.client, [driver_cmd])
 # Read states until command_id appears in motor's last_command field
 ```
+
+**Reducing boilerplate with closures:**
+```python
+# Define a local helper to handle repetitive arguments
+async def run_cmd(action_func, motor_id, *args, torque_after=0):
+    await action_func(
+        self.bus_serial,
+        motor_id,
+        *args,
+        torque_after=torque_after,
+        motor_positions=self.motor_positions,
+        speed=MOTOR_SPEEDS[motor_id],
+        accel=MOTOR_ACCELS[motor_id]
+    )
+
+# Steps 1-3: Motor 1
+await run_cmd(self.driver.find_max, 1)
+await run_cmd(self.driver.find_min, 1)
+await run_cmd(self.driver.go_to_float_position, 1, 0.5)
+
+# Step 4: Motor 2
+await run_cmd(self.driver.find_min, 2)
+
+# Step 5: Motor 3
+await run_cmd(self.driver.find_max, 3)
+
+# Steps 6-8: Motor 4
+await run_cmd(self.driver.find_max, 4)
+await run_cmd(self.driver.find_min, 4)
+await run_cmd(self.driver.go_to_float_position, 4, 0.5, torque_after=1)
+
+# Steps 9-10: Motor 5
+await run_cmd(self.driver.find_max, 5)
+await run_cmd(self.driver.find_min, 5)
+```
