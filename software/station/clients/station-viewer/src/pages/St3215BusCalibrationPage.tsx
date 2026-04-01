@@ -7,6 +7,7 @@ import { useInferenceState, useWakeLock } from '../hooks';
 import { useLocation, Link, useNavigate } from 'react-router-dom';
 import { getMotorVoltage } from '../st3215/motor-parser';
 
+const MIN_CALIBRATED_RANGE = 100;
 const actionButtonClasses = 'inline-flex w-full shrink-0 items-center justify-center whitespace-nowrap rounded-lg px-4 py-2 text-sm font-bold transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto md:px-6 md:py-3 md:text-base';
 const wideActionButtonClasses = `${actionButtonClasses} sm:min-w-[13.5rem]`;
 
@@ -53,6 +54,17 @@ const St3215BusCalibrationPage: React.FC = () => {
     : null;
   const isCalibrationFrozen = currentBusState?.motors?.some((motor: st3215.InferenceState.IMotorState) => motor.rangeFreezed) ?? false;
   const [showResetConfirmation, setShowResetConfirmation] = useState(isCalibrationFrozen);
+  const getMotorRange = (motor: st3215.InferenceState.IMotorState) => {
+    const min = motor.rangeMin ?? 0;
+    const max = motor.rangeMax ?? 0;
+    return max >= min ? max - min : (4096 - min) + max;
+  };
+  const motorsWithNarrowRange = currentBusState?.motors?.filter(
+    (motor: st3215.InferenceState.IMotorState) => getMotorRange(motor) < MIN_CALIBRATED_RANGE
+  ) ?? [];
+  const allMotorsNarrow = motorsWithNarrowRange.length === (currentBusState?.motors?.length ?? 0);
+  const showMoveOverlay = !isCalibrationFrozen && !showResetConfirmation && allMotorsNarrow;
+
   const calibrationState = currentBusState?.autoCalibration;
   const isCalibrating = calibrationState?.status === st3215.AutoCalibrationState.Status.IN_PROGRESS;
   const hasValidMotors = currentBusState ? [6, 8].includes(currentBusState.motors?.length || 0) : false;
@@ -65,6 +77,17 @@ const St3215BusCalibrationPage: React.FC = () => {
     return voltage > 0 ? Math.min(min, voltage) : min;
   }, 255) ?? 255;
   const isLowVoltage = minVoltage < 70; // Less than 7.0V
+
+  // Send reset command when the calibration page opens
+  useEffect(() => {
+    if (!selectedBus?.bus?.serialNumber) return;
+    webSocketManager.commands.sendSt3215Command({
+      targetBusSerial: selectedBus.bus.serialNumber,
+      resetCalibration: {
+        reset: true
+      }
+    });
+  }, [selectedBus?.bus?.serialNumber]);
 
   useEffect(() => {
     if (isSavePending && isCalibrationFrozen) {
@@ -315,6 +338,18 @@ const St3215BusCalibrationPage: React.FC = () => {
           )}
 
           <div className="flex-1 relative overflow-hidden">
+            {showMoveOverlay && !isCalibrating && (
+              <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/60 backdrop-blur-sm pointer-events-none">
+                <div className="max-w-md text-center px-6 py-8">
+                  <p className="text-2xl font-bold text-yellow-400 mb-4">
+                    Move all motors through their full range
+                  </p>
+                  <p className="text-gray-300 mb-4">
+                    Slowly move each joint from one limit to the other so the 3D view matches your arm's position.
+                  </p>
+                </div>
+              </div>
+            )}
             {[6, 8].includes(currentBusState.motors?.length || 0) ? (
               <BusWebGLRenderer
                 busSerialNumber={currentBusState.bus?.serialNumber}

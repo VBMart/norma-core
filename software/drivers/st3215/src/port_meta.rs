@@ -406,6 +406,10 @@ impl St3215PortMeta {
                     let points = motor_points.entry(motor_id).or_default();
                     if points.insert(position) {
                         let cal_arc = calibrate::calculate_arc(points);
+                        log::debug!(
+                            "Motor {}: new point position={} offset={} range_min={} range_max={}",
+                            motor_id, position, offset, cal_arc.min, cal_arc.max
+                        );
                         comm.update_bounds(
                             &target_serial,
                             motor_id as u32,

@@ -182,9 +182,10 @@ impl St3215Port {
                         None
                     };
 
-                    if command.reset.is_some() || command.reg_write.is_some() {
-                        let mut cache = eeprom_cache.lock();
-                        cache.remove(&(motor_id as u8));
+                    if command.reset_calibration.is_some() || command.freeze_calibration.is_some() {
+                        eeprom_cache.lock().clear();
+                    } else if command.reset.is_some() || command.reg_write.is_some() {
+                        eeprom_cache.lock().remove(&(motor_id as u8));
                     }
 
                     match Self::process_command(&mut port, &command, &bus_info, &meta).await {
@@ -270,7 +271,11 @@ impl St3215Port {
         eeprom_cache: &Arc<Mutex<HashMap<u8, Bytes>>>,
     ) -> bool {
         let mut currently_seen_motors = HashSet::new();
-        let ram_start_addr = protocol::RamRegister::TorqueEnable.address();
+        let eeprom_size = protocol::RamRegister::TorqueEnable.address() as usize;
+        let ram_size = (protocol::RamRegister::PresentCurrent.address()
+            + protocol::RamRegister::PresentCurrent.size()
+            - protocol::RamRegister::TorqueEnable.address()) as usize;
+        let full_size = eeprom_size + ram_size;
 
         for &motor_id in last_seen_motors.iter() {
             if Self::should_break_read(command_waiting) {
@@ -298,10 +303,10 @@ impl St3215Port {
                         combined.extend_from_slice(&read_data);
                         combined.freeze()
                     } else {
-                        if read_data.len() >= ram_start_addr as usize {
+                        if read_data.len() >= eeprom_size {
                             eeprom_cache
                                 .lock()
-                                .insert(motor_id, read_data.slice(..ram_start_addr as usize));
+                                .insert(motor_id, read_data.slice(..eeprom_size));
                         }
                         read_data
                     };
@@ -314,16 +319,37 @@ impl St3215Port {
                     enqueue_error(com, bus_info, motor_id as u16, e);
                     if let protocol::Error::Servo { ref data, .. } = e {
                         currently_seen_motors.insert(motor_id);
-                        if !data.is_empty()
-                            && Self::send_drive_state_envelope(
+                        if !data.is_empty() {
+                            let final_data =
+                                if data.len() >= full_size {
+                                    // Full read (eeprom + ram)
+                                    data.clone()
+                                } else if data.len() >= ram_size {
+                                    if let Some(eeprom) = cached_eeprom {
+                                        // RAM only - prepend cached eeprom
+                                        let mut combined =
+                                            BytesMut::with_capacity(eeprom.len() + data.len());
+                                        combined.extend_from_slice(&eeprom);
+                                        combined.extend_from_slice(data);
+                                        combined.freeze()
+                                    } else {
+                                        error!("Motor {}: servo error with RAM-only data but no EEPROM cache, sending empty. Data: {:02x?}", motor_id, data.as_ref());
+                                        Bytes::new()
+                                    }
+                                } else {
+                                    error!("Motor {}: servo error with unexpected data size {}, sending empty. Data: {:02x?}", motor_id, data.len(), data.as_ref());
+                                    Bytes::new()
+                                };
+                            if Self::send_drive_state_envelope(
                                 com,
                                 bus_info,
                                 motor_id,
-                                data.clone(),
+                                final_data,
                             )
                             .is_err()
-                        {
-                            return false;
+                            {
+                                return false;
+                            }
                         }
                     }
                 }
@@ -715,10 +741,18 @@ impl St3215Port {
             .unwrap_or(false)
         {
             info!("Processing ST3215 Reset Calibration command for all motors.");
+            let mut all_ok = true;
             for motor_id in 1..=MAX_MOTORS_CNT {
-                if let Err(e) = Self::reset_calibration(port, motor_id).await {
-                    warn!("Failed to reset calibration for motor {}: {}", motor_id, e);
+                match Self::reset_calibration(port, motor_id).await {
+                    Ok(verified) => { all_ok &= verified; }
+                    Err(e) => {
+                        warn!("Failed to reset calibration for motor {}: {}", motor_id, e);
+                        all_ok = false;
+                    }
                 }
+            }
+            if !all_ok {
+                return Ok(false);
             }
         } else if command
             .freeze_calibration
@@ -739,11 +773,19 @@ impl St3215Port {
                 }
             }
 
+            let mut all_ok = true;
             for motor_id in 1..=MAX_MOTORS_CNT {
                 let provided_midpoint = midpoints.get(&motor_id).copied();
-                if let Err(e) = Self::freeze_calibration(port, motor_id, meta, bus_info, provided_midpoint).await {
-                    warn!("Failed to freeze calibration for motor {}: {}", motor_id, e);
+                match Self::freeze_calibration(port, motor_id, meta, bus_info, provided_midpoint).await {
+                    Ok(verified) => { all_ok &= verified; }
+                    Err(e) => {
+                        warn!("Failed to freeze calibration for motor {}: {}", motor_id, e);
+                        all_ok = false;
+                    }
                 }
+            }
+            if !all_ok {
+                return Ok(false);
             }
         } else if command
             .auto_calibrate
@@ -766,39 +808,81 @@ impl St3215Port {
         Ok(true)
     }
 
-    /// Helper: RegWrite + Action pattern for EEPROM writes
+    /// Helper: RegWrite + Action pattern for EEPROM writes with read-back verification and retries
     pub async fn reg_write_with_action(
         port: &mut tokio_serial::SerialStream,
         motor_id: u8,
         register: protocol::EepromRegister,
         data: Bytes,
-    ) -> Result<(), protocol::Error> {
-        info!(
-            "Processing ST3215 RegWriteWithAction command - Motor: {}, Address: 0x{:02X}, Value: {:?}",
-            motor_id, register.address(), data
+    ) -> Result<bool, protocol::Error> {
+        const MAX_RETRIES: u8 = 5;
+
+        for attempt in 1..=MAX_RETRIES {
+            info!(
+                "EEPROM write motor {}: 0x{:02X} = {:02x?} (attempt {}/{})",
+                motor_id, register.address(), data.as_ref(), attempt, MAX_RETRIES
+            );
+
+            let reg_write_req = protocol::ST3215Request::RegWrite {
+                motor: motor_id,
+                address: register.address(),
+                data: data.clone(),
+            };
+            reg_write_req
+                .async_readwrite(port, ST3215_COMMAND_TIMEOUT_MS)
+                .await?;
+
+            let action_req = protocol::ST3215Request::Action { motor: motor_id };
+            action_req
+                .async_readwrite(port, ST3215_COMMAND_TIMEOUT_MS)
+                .await?;
+
+            // Read back and verify
+            let read_req = protocol::ST3215Request::Read {
+                motor: motor_id,
+                address: register.address(),
+                length: register.size(),
+            };
+            match read_req.async_readwrite(port, ST3215_COMMAND_TIMEOUT_MS).await {
+                Ok(protocol::ST3215Response::Read { data: readback, .. }) => {
+                    if readback.as_ref() == data.as_ref() {
+                        info!(
+                            "EEPROM write verified motor {}: 0x{:02X} = {:02x?}",
+                            motor_id, register.address(), data.as_ref()
+                        );
+                        return Ok(true);
+                    }
+                    warn!(
+                        "EEPROM verify mismatch motor {}: 0x{:02X} expected {:02x?} got {:02x?} (attempt {}/{})",
+                        motor_id, register.address(), data.as_ref(), readback.as_ref(), attempt, MAX_RETRIES
+                    );
+                }
+                Ok(_) => {
+                    warn!(
+                        "EEPROM verify unexpected response motor {}: 0x{:02X} (attempt {}/{})",
+                        motor_id, register.address(), attempt, MAX_RETRIES
+                    );
+                }
+                Err(e) => {
+                    warn!(
+                        "EEPROM verify read failed motor {}: 0x{:02X}: {} (attempt {}/{})",
+                        motor_id, register.address(), e, attempt, MAX_RETRIES
+                    );
+                }
+            }
+        }
+
+        error!(
+            "EEPROM write failed after {} retries motor {}: 0x{:02X} = {:02x?}",
+            MAX_RETRIES, motor_id, register.address(), data.as_ref()
         );
-
-        let reg_write_req = protocol::ST3215Request::RegWrite {
-            motor: motor_id,
-            address: register.address(),
-            data,
-        };
-        reg_write_req
-            .async_readwrite(port, ST3215_COMMAND_TIMEOUT_MS)
-            .await?;
-
-        let action_req = protocol::ST3215Request::Action { motor: motor_id };
-        action_req
-            .async_readwrite(port, ST3215_COMMAND_TIMEOUT_MS)
-            .await?;
-
-        Ok(())
+        Ok(false)
     }
 
     pub async fn reset_calibration(
         port: &mut tokio_serial::SerialStream,
         motor_id: u8,
-    ) -> Result<(), protocol::Error> {
+    ) -> Result<bool, protocol::Error> {
         info!(
             "Processing ST3215 ResetCalibration command - Motor: {}",
             motor_id
@@ -837,7 +921,7 @@ impl St3215Port {
             .await?;
 
         // write zero offset
-        Self::reg_write_with_action(
+        let verified = Self::reg_write_with_action(
             port,
             motor_id,
             protocol::EepromRegister::Offset,
@@ -870,7 +954,7 @@ impl St3215Port {
             "ST3215 ResetCalibration command completed for Motor: {}",
             motor_id
         );
-        Ok(())
+        Ok(verified)
     }
 
     pub async fn auto_calibrate(
@@ -887,7 +971,7 @@ impl St3215Port {
         meta: &St3215PortMeta,
         bus_info: &St3215BusProto,
         provided_midpoint: Option<u16>,
-    ) -> Result<(), protocol::Error> {
+    ) -> Result<bool, protocol::Error> {
         // 1. Get midpoint - use provided if available, otherwise calculate
         let midpoint = if let Some(mp) = provided_midpoint {
             info!("Motor {}: Using provided midpoint {}", motor_id, mp);
@@ -904,7 +988,7 @@ impl St3215Port {
                         motor_id
                     );
                     // Not a protocol error, but we can't proceed.
-                    return Ok(());
+                    return Ok(true);
                 }
             }
         };
@@ -946,8 +1030,9 @@ impl St3215Port {
             "Applying custom calibration settings for motor {}",
             motor_id
         );
+        let mut all_verified = true;
         // Set operating mode to position control
-        Self::reg_write_with_action(
+        all_verified &= Self::reg_write_with_action(
             port,
             motor_id,
             protocol::EepromRegister::Mode,
@@ -955,7 +1040,7 @@ impl St3215Port {
         )
         .await?;
         // Set P_Coefficient
-        Self::reg_write_with_action(
+        all_verified &= Self::reg_write_with_action(
             port,
             motor_id,
             protocol::EepromRegister::PCoef,
@@ -963,7 +1048,7 @@ impl St3215Port {
         )
         .await?;
         // Set I_Coefficient
-        Self::reg_write_with_action(
+        all_verified &= Self::reg_write_with_action(
             port,
             motor_id,
             protocol::EepromRegister::ICoef,
@@ -971,7 +1056,7 @@ impl St3215Port {
         )
         .await?;
         // Set D_Coefficient
-        Self::reg_write_with_action(
+        all_verified &= Self::reg_write_with_action(
             port,
             motor_id,
             protocol::EepromRegister::DCoef,
@@ -979,7 +1064,7 @@ impl St3215Port {
         )
         .await?;
         // Set Return Delay Time to 0
-        Self::reg_write_with_action(
+        all_verified &= Self::reg_write_with_action(
             port,
             motor_id,
             protocol::EepromRegister::ReturnDelay,
@@ -987,7 +1072,7 @@ impl St3215Port {
         )
         .await?;
         // Set Max Torque
-        Self::reg_write_with_action(
+        all_verified &= Self::reg_write_with_action(
             port,
             motor_id,
             protocol::EepromRegister::MaxTorque,
@@ -995,7 +1080,7 @@ impl St3215Port {
         )
         .await?;
         // Set Protection Current
-        Self::reg_write_with_action(
+        all_verified &= Self::reg_write_with_action(
             port,
             motor_id,
             protocol::EepromRegister::ProtectionCurrent,
@@ -1003,7 +1088,7 @@ impl St3215Port {
         )
         .await?;
         // Set Overload Torque
-        Self::reg_write_with_action(
+        all_verified &= Self::reg_write_with_action(
             port,
             motor_id,
             protocol::EepromRegister::OverloadTorque,
@@ -1026,7 +1111,7 @@ impl St3215Port {
             .await?;
 
         // 3. Position correction write
-        Self::reg_write_with_action(
+        all_verified &= Self::reg_write_with_action(
             port,
             motor_id,
             protocol::EepromRegister::Offset,
@@ -1065,7 +1150,7 @@ impl St3215Port {
             "ST3215 FreezeCalibration command completed for Motor: {}",
             motor_id
         );
-        Ok(())
+        Ok(all_verified)
     }
 }
 

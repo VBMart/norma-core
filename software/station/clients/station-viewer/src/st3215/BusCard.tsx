@@ -343,20 +343,28 @@ const BusCard: React.FC<BusCardProps> = ({
         <div className="relative h-180">
           <div className="absolute inset-0 p-4 flex flex-col items-center justify-center bg-gray-900/20">
             <p className="text-yellow-400 mb-4 text-center">
-              3D model visualization is only available for 6 or 8-motor
-              configurations.
-              <br />
-              This bus has {bus.motors?.length || 0} motor
-              {bus.motors?.length === 1 ? "" : "s"}.
+              {(bus.motors?.length || 0) === 0 ? (
+                <>No motors connected to this bus.</>
+              ) : (
+                <>
+                  3D model visualization is only available for 6 or 8-motor
+                  configurations.
+                  <br />
+                  This bus has {bus.motors?.length} motor
+                  {bus.motors?.length === 1 ? "" : "s"}.
+                </>
+              )}
             </p>
             <div className="flex gap-4">
-              <Link
-                to="/st3215-bus-calibration"
-                state={{ bus }}
-                className={`px-4 py-2 rounded text-base font-bold transition-colors bg-green-600 text-white hover:bg-green-500 ${needsCalibration ? "ring-4 ring-green-500/50 scale-110" : ""}`}
-              >
-                Calibrate
-              </Link>
+              {(bus.motors?.length || 0) > 1 && (
+                <Link
+                  to="/st3215-bus-calibration"
+                  state={{ bus }}
+                  className={`px-4 py-2 rounded text-base font-bold transition-colors bg-green-600 text-white hover:bg-green-500 ${needsCalibration ? "ring-4 ring-green-500/50 scale-110" : ""}`}
+                >
+                  Calibrate
+                </Link>
+              )}
               {bus.motors?.length === 1 && (
                 <Link
                   to={`/st3215-bind-motors`}
@@ -364,7 +372,7 @@ const BusCard: React.FC<BusCardProps> = ({
                   className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded text-white transition-colors"
                   title="Configure motor ID"
                 >
-                  Configure Motors IDs
+                  Configure Motor ID
                 </Link>
               )}
             </div>
