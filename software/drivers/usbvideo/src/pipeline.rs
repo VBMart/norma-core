@@ -246,6 +246,7 @@ impl<K: USBCameraDriver> USBVideoManager<K> {
                 tokio::spawn(async move {
                     let queue_id_str = USBVideoManager::<K>::generate_queue_id(&camera.unique_id);
                     let queue_id = cam_tracker.resolve_queue_id(&queue_id_str);
+                    let mut queue_started = false;
 
                     loop {
                         // Check if stopped before processing camera
@@ -255,6 +256,17 @@ impl<K: USBCameraDriver> USBVideoManager<K> {
                         }
 
                         let src_formats = cam_driver.get_camera_formats(&camera).await;
+
+                        for fmt in &src_formats {
+                            info!(
+                                "Camera {} format: {} ({}x{}, {:.2} FPS)",
+                                camera.unique_id,
+                                converters::fourcc_to_string(&converters::fourcc_from_u32(fmt.fourcc)),
+                                fmt.width,
+                                fmt.height,
+                                fmt.frames_per_second,
+                            );
+                        }
 
                         let formats = converters::filter_and_sort_cameras_formats(
                             &src_formats
@@ -270,6 +282,7 @@ impl<K: USBCameraDriver> USBVideoManager<K> {
                         }
 
                         cam_tracker.handle_queue_start(&queue_id).await;
+                        queue_started = true;
 
                         Self::send_device_connected(
                             &queue_id,
@@ -326,7 +339,9 @@ impl<K: USBCameraDriver> USBVideoManager<K> {
 
                     info!("Capture session for {} ended.", camera.unique_id);
 
-                    Self::send_device_disconnected(&queue_id, &cam_tracker, &camera);
+                    if queue_started {
+                        Self::send_device_disconnected(&queue_id, &cam_tracker, &camera);
+                    }
                     cam_known.write().await.remove(&camera.unique_id);
                 });
             }
