@@ -125,7 +125,7 @@ async fn run_calibration_sequence(
     // Prepare all 6 motors
     calibrator.next_step("Preparing all motors").await?;
     for motor_id in 1..=6 {
-        calibrator.prepare_motor(motor_id).await?;
+        calibrator.prepare_motor(motor_id, 6).await?;
         info!("Motor {} prepared", motor_id);
     }
 

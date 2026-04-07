@@ -16,6 +16,8 @@ use tokio::time::Duration;
 const VELOCITY_THRESHOLD: u16 = 10;
 const SKIP_INITIAL_SAMPLES: u32 = 3;
 const MOTOR_STARTUP_STEPS: u32 = 4;
+const MIN_DISPLACEMENT: u32 = 5;
+const MAX_READS_WITHOUT_DISPLACEMENT: u32 = 100;
 const CALIBRATION_STEP: u16 = 1020;
 const SAFE_OFFSET: u16 = 60;
 
@@ -205,8 +207,10 @@ impl ST3215Calibrator {
         self.send_write(motor_id, address, value.clone()).await?;
 
         // Wait for value to appear in registers
-        let timeout = Duration::from_secs(2);
+        let timeout = Duration::from_secs(5);
         let deadline = tokio::time::Instant::now() + timeout;
+        let max_retries = 5;
+        let mut attempt = 0;
 
         loop {
             tokio::select! {
@@ -228,7 +232,10 @@ impl ST3215Calibrator {
                     }
                 }
                 _ = tokio::time::sleep_until(deadline) => {
-                    return Err("Write verification timeout".into());
+                    attempt += 1;
+                    if attempt >= max_retries {
+                        return Err("EEPROM write verification timeout".into());
+                    }
                 }
             }
         }
@@ -281,8 +288,10 @@ impl ST3215Calibrator {
         self.send_eeprom_write(motor_id, address, value.clone()).await?;
 
         // Wait for value to appear in EEPROM registers
-        let timeout = Duration::from_secs(2);
+        let timeout = Duration::from_secs(5);
         let deadline = tokio::time::Instant::now() + timeout;
+        let max_retries = 5;
+        let mut attempt = 0;
 
         loop {
             tokio::select! {
@@ -304,7 +313,10 @@ impl ST3215Calibrator {
                     }
                 }
                 _ = tokio::time::sleep_until(deadline) => {
-                    return Err("EEPROM write verification timeout".into());
+                    attempt += 1;
+                    if attempt >= max_retries {
+                        return Err("EEPROM write verification timeout".into());
+                    }
                 }
             }
         }
@@ -394,17 +406,18 @@ impl ST3215Calibrator {
         self.send_write_verified(motor_id, RamRegister::GoalPosition.address(), position.to_le_bytes().to_vec()).await
     }
 
-    pub async fn prepare_motor(&mut self, motor_id: u8) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn prepare_motor(&mut self, motor_id: u8, max_motors_cnt: u8) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         info!("Motor {} - Preparing", motor_id);
 
         self.send_reset(motor_id).await?;
         tokio::time::sleep(Duration::from_millis(100)).await;
 
-        info!("Motor {} - Setting EEPROM parameters", motor_id);
+        let pid = pid_config_for_motor_count(max_motors_cnt);
+        info!("Motor {} - Setting EEPROM parameters (PID: p={}, i={}, d={})", motor_id, pid.p, pid.i, pid.d);
         self.send_eeprom_write_verified(motor_id, EepromRegister::Mode.address(), vec![0]).await?;
-        self.send_eeprom_write_verified(motor_id, EepromRegister::PCoef.address(), vec![DEFAULT_PID_P]).await?;
-        self.send_eeprom_write_verified(motor_id, EepromRegister::ICoef.address(), vec![DEFAULT_PID_I]).await?;
-        self.send_eeprom_write_verified(motor_id, EepromRegister::DCoef.address(), vec![DEFAULT_PID_D]).await?;
+        self.send_eeprom_write_verified(motor_id, EepromRegister::PCoef.address(), vec![pid.p]).await?;
+        self.send_eeprom_write_verified(motor_id, EepromRegister::ICoef.address(), vec![pid.i]).await?;
+        self.send_eeprom_write_verified(motor_id, EepromRegister::DCoef.address(), vec![pid.d]).await?;
         self.send_eeprom_write_verified(motor_id, EepromRegister::ReturnDelay.address(), vec![0]).await?;
 
         info!("Motor {} - Setting RAM parameters", motor_id);
@@ -430,6 +443,36 @@ impl ST3215Calibrator {
         Ok(())
     }
 
+    pub async fn read_encoder_position(&mut self, motor_id: u8) -> Result<u16, Box<dyn std::error::Error + Send + Sync>> {
+        if self.inference_rx.changed().await.is_ok() {
+            let state = self.inference_rx.borrow().clone();
+            if let Some(bus) = state.buses.iter().find(|b| {
+                b.bus.as_ref().map(|bus| bus.serial_number.as_str()) == Some(&self.target_bus_serial)
+            }) {
+                if let Some(motor) = bus.motors.iter().find(|m| m.id == motor_id as u32) {
+                    if motor.state.len() <= RamRegister::PresentPosition.address() as usize + 1 {
+                        log::warn!("Motor {} - State size too small to read position. Got {} bytes", motor_id, motor.state.len());
+                        return Err("Failed to read position".into());
+                    }
+                    let displayed = crate::protocol::get_motor_position(&motor.state);
+                    let offset_addr = EepromRegister::Offset.address() as usize;
+                    let offset = if motor.state.len() > offset_addr + 1 {
+                        i16::from_le_bytes([motor.state[offset_addr], motor.state[offset_addr + 1]])
+                    } else {
+                        0
+                    };
+                    Ok(((displayed as i32 + offset as i32 + 4096) % 4096) as u16)
+                } else {
+                    Err("Motor not found".into())
+                }
+            } else {
+                Err("Bus not found".into())
+            }
+        } else {
+            Err("Failed to read motor state".into())
+        }
+    }
+
     pub async fn wait_for_stall(&mut self, motor_id: u8) -> Result<u16, Box<dyn std::error::Error + Send + Sync>> {
         info!("Motor {} - Waiting for stall", motor_id);
 
@@ -438,6 +481,8 @@ impl ST3215Calibrator {
         let mut startup_steps = 0u32;
         let mut stable_count = 0u32;
         let mut first_stale_stamp: Option<u64> = None;
+        let mut start_position: Option<u16> = None;
+        let mut total_fresh_reads: u32 = 0;
 
         loop {
             self.check_stop().await?;
@@ -477,27 +522,46 @@ impl ST3215Calibrator {
                         let encoder_position = ((displayed_position as i32 + offset as i32 + 4096) % 4096) as u16;
                         self.motor_positions.entry(motor_id).or_insert_with(BTreeSet::new).insert(encoder_position);
 
+                        if start_position.is_none() {
+                            start_position = Some(displayed_position);
+                        }
+
+                        if is_fresh {
+                            total_fresh_reads += 1;
+                        }
+
+                        let displacement = (displayed_position as i32 - start_position.unwrap() as i32).unsigned_abs();
+                        let displaced = displacement >= MIN_DISPLACEMENT;
+
                         if startup_steps >= MOTOR_STARTUP_STEPS {
-                            if !is_fresh && velocity < VELOCITY_THRESHOLD {
-                                if first_stale_stamp.is_none() {
-                                    first_stale_stamp = Some(current_stamp);
+                            if displaced {
+                                if !is_fresh && velocity < VELOCITY_THRESHOLD {
+                                    if first_stale_stamp.is_none() {
+                                        first_stale_stamp = Some(current_stamp);
+                                    }
+
+                                    let stale_duration_ms = (current_stamp - first_stale_stamp.unwrap()) / 1_000_000;
+                                    if stale_duration_ms >= 100 {
+                                        stable_count += 1;
+                                    }
+                                } else if is_fresh {
+                                    first_stale_stamp = None;
+                                    if velocity < VELOCITY_THRESHOLD {
+                                        stable_count += 1;
+                                    } else {
+                                        stable_count = 0;
+                                    }
                                 }
 
-                                let stale_duration_ms = (current_stamp - first_stale_stamp.unwrap()) / 1_000_000;
-                                if stale_duration_ms >= 100 {
-                                    stable_count += 1;
+                                if stable_count > SKIP_INITIAL_SAMPLES {
+                                    info!("Motor {} - Stalled at position {}", motor_id, displayed_position);
+                                    return Ok(displayed_position);
                                 }
-                            } else if is_fresh {
-                                first_stale_stamp = None;
-                                if velocity < VELOCITY_THRESHOLD {
-                                    stable_count += 1;
-                                } else {
-                                    stable_count = 0;
-                                }
-                            }
-
-                            if stable_count > SKIP_INITIAL_SAMPLES {
-                                info!("Motor {} - Stalled at position {}", motor_id, displayed_position);
+                            } else if total_fresh_reads >= MAX_READS_WITHOUT_DISPLACEMENT {
+                                log::warn!(
+                                    "Motor {} - Unable to move from position {} after {} fresh reads",
+                                    motor_id, displayed_position, total_fresh_reads
+                                );
                                 return Ok(displayed_position);
                             }
                         }
@@ -511,34 +575,7 @@ impl ST3215Calibrator {
         info!("Motor {} - Finding minimum position", motor_id);
         self.check_stop().await?;
 
-        // Read current encoder position
-        let current_encoder = if self.inference_rx.changed().await.is_ok() {
-            let state = self.inference_rx.borrow().clone();
-            if let Some(bus) = state.buses.iter().find(|b| {
-                b.bus.as_ref().map(|bus| bus.serial_number.as_str()) == Some(&self.target_bus_serial)
-            }) {
-                if let Some(motor) = bus.motors.iter().find(|m| m.id == motor_id as u32) {
-                    if motor.state.len() <= RamRegister::PresentPosition.address() as usize + 1 {
-                        return Err("Failed to read position".into());
-                    }
-                    let displayed = crate::protocol::get_motor_position(&motor.state);
-                    let offset_addr = EepromRegister::Offset.address() as usize;
-                    let offset = if motor.state.len() > offset_addr + 1 {
-                        i16::from_le_bytes([motor.state[offset_addr], motor.state[offset_addr + 1]])
-                    } else {
-                        0
-                    };
-                    // encoder = displayed + offset (wrapped to 12-bit)
-                    ((displayed as i32 + offset as i32 + 4096) % 4096) as u16
-                } else {
-                    return Err("Motor not found".into());
-                }
-            } else {
-                return Err("Bus not found".into());
-            }
-        } else {
-            return Err("Failed to read motor state".into());
-        };
+        let current_encoder = self.read_encoder_position(motor_id).await?;
 
         let mut new_offset = (current_encoder as i32 - (4095 - SAFE_OFFSET as i32)) as i16;
 
@@ -582,34 +619,7 @@ impl ST3215Calibrator {
         info!("Motor {} - Finding maximum position", motor_id);
         self.check_stop().await?;
 
-        // Read current encoder position
-        let current_encoder = if self.inference_rx.changed().await.is_ok() {
-            let state = self.inference_rx.borrow().clone();
-            if let Some(bus) = state.buses.iter().find(|b| {
-                b.bus.as_ref().map(|bus| bus.serial_number.as_str()) == Some(&self.target_bus_serial)
-            }) {
-                if let Some(motor) = bus.motors.iter().find(|m| m.id == motor_id as u32) {
-                    if motor.state.len() <= RamRegister::PresentPosition.address() as usize + 1 {
-                        return Err("Failed to read position".into());
-                    }
-                    let displayed = crate::protocol::get_motor_position(&motor.state);
-                    let offset_addr = EepromRegister::Offset.address() as usize;
-                    let offset = if motor.state.len() > offset_addr + 1 {
-                        i16::from_le_bytes([motor.state[offset_addr], motor.state[offset_addr + 1]])
-                    } else {
-                        0
-                    };
-                    // encoder = displayed + offset (wrapped to 12-bit)
-                    ((displayed as i32 + offset as i32 + 4096) % 4096) as u16
-                } else {
-                    return Err("Motor not found".into());
-                }
-            } else {
-                return Err("Bus not found".into());
-            }
-        } else {
-            return Err("Failed to read motor state".into());
-        };
+        let current_encoder = self.read_encoder_position(motor_id).await?;
 
         let mut new_offset = (current_encoder as i32 - SAFE_OFFSET as i32) as i16;
 
@@ -652,32 +662,7 @@ impl ST3215Calibrator {
         info!("Motor {} - Shifting by {} steps", motor_id, steps);
         self.check_stop().await?;
 
-        let current_encoder = if self.inference_rx.changed().await.is_ok() {
-            let state = self.inference_rx.borrow().clone();
-            if let Some(bus) = state.buses.iter().find(|b| {
-                b.bus.as_ref().map(|bus| bus.serial_number.as_str()) == Some(&self.target_bus_serial)
-            }) {
-                if let Some(motor) = bus.motors.iter().find(|m| m.id == motor_id as u32) {
-                    if motor.state.len() <= RamRegister::PresentPosition.address() as usize + 1 {
-                        return Err("Failed to read position".into());
-                    }
-                    let displayed = crate::protocol::get_motor_position(&motor.state);
-                    let offset_addr = EepromRegister::Offset.address() as usize;
-                    let offset = if motor.state.len() > offset_addr + 1 {
-                        i16::from_le_bytes([motor.state[offset_addr], motor.state[offset_addr + 1]])
-                    } else {
-                        0
-                    };
-                    ((displayed as i32 + offset as i32 + 4096) % 4096) as u16
-                } else {
-                    return Err("Motor not found".into());
-                }
-            } else {
-                return Err("Bus not found".into());
-            }
-        } else {
-            return Err("Failed to read motor state".into());
-        };
+        let current_encoder = self.read_encoder_position(motor_id).await?;
 
         let start_position = if steps >= 0 { SAFE_OFFSET as i32 } else { 4095 - SAFE_OFFSET as i32 };
         let mut new_offset = (current_encoder as i32 - start_position) as i16;
