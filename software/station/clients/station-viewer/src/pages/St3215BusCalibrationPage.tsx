@@ -68,7 +68,8 @@ const St3215BusCalibrationPage: React.FC = () => {
   const calibrationState = currentBusState?.autoCalibration;
   const isCalibrating = calibrationState?.status === st3215.AutoCalibrationState.Status.IN_PROGRESS;
   const hasValidMotors = currentBusState ? [6, 8].includes(currentBusState.motors?.length || 0) : false;
-  const isSupportedRobot = hasValidMotors;
+  const isElrobot = (currentBusState?.motors?.length || 0) >= 8;
+  const isSupportedRobot = hasValidMotors && !isElrobot;
 
   // Check voltage across all motors (voltage is in 0.1V units, so 70 = 7.0V)
   const minVoltage = currentBusState?.motors?.reduce((min, motor) => {
