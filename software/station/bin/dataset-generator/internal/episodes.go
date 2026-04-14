@@ -32,15 +32,17 @@ type EpisodeDetector struct {
 
 	buffer []Frame
 
-	stats   Stats
-	program *tea.Program
+	stats                Stats
+	firstSkipImageCount  int
+	program              *tea.Program
 }
 
 type Stats struct {
-	EpisodesStarted   uint64
-	EpisodesSaved     uint64
-	EpisodesDiscarded uint64
-	TotalFramesSaved  uint64
+	EpisodesStarted              uint64
+	EpisodesSaved                uint64
+	EpisodesDiscarded            uint64
+	TotalFramesSaved             uint64
+	FramesSkippedWrongImageCount uint64
 }
 
 type EpisodeDetectorConfig struct {
@@ -64,6 +66,22 @@ func NewEpisodeDetector(cfg EpisodeDetectorConfig) *EpisodeDetector {
 func (ed *EpisodeDetector) ProcessFrame(frame *normvla.FrameReader) {
 	// Skip frames without exactly 2 images
 	if len(frame.GetImages()) != 2 {
+		ed.stats.FramesSkippedWrongImageCount++
+
+		// Log first occurrence with details
+		if ed.stats.FramesSkippedWrongImageCount == 1 {
+			ed.firstSkipImageCount = len(frame.GetImages())
+			frameId, _ := uintn.FromLEBytes(frame.GetGlobalFrameId())
+			log.Warn().Msgf("⚠️  Skipping frames with != 2 images (first at frame %v, found %d images)",
+				frameId, len(frame.GetImages()))
+		}
+
+		// Log periodic progress every 100 skipped frames
+		if ed.stats.FramesSkippedWrongImageCount%100 == 0 {
+			log.Warn().Msgf("⚠️  Skipped %d frames due to wrong image count",
+				ed.stats.FramesSkippedWrongImageCount)
+		}
+
 		return
 	}
 
@@ -263,6 +281,14 @@ func (ed *EpisodeDetector) updateGoalTracking(goals []uint32) {
 	copy(ed.lastGoals, goals)
 }
 
+func (ed *EpisodeDetector) GetSkipInfo() (count uint64, reason string) {
+	if ed.stats.FramesSkippedWrongImageCount > 0 {
+		return ed.stats.FramesSkippedWrongImageCount,
+			fmt.Sprintf("expected 2 images, found %d", ed.firstSkipImageCount)
+	}
+	return 0, ""
+}
+
 func (ed *EpisodeDetector) Finalize() {
 	if ed.episodeMonotonicStart != 0 {
 		ed.trySaveCurrentEpisode()
@@ -345,6 +371,11 @@ func (ed *EpisodeDetector) printStats() {
 	log.Info().Msgf("Episodes saved:     %d", ed.stats.EpisodesSaved)
 	log.Info().Msgf("Episodes discarded: %d", ed.stats.EpisodesDiscarded)
 	log.Info().Msgf("Total frames saved: %d", ed.stats.TotalFramesSaved)
+
+	if ed.stats.FramesSkippedWrongImageCount > 0 {
+		log.Warn().Msgf("⚠️  Frames skipped: %d (expected 2 images, found %d)",
+			ed.stats.FramesSkippedWrongImageCount, ed.firstSkipImageCount)
+	}
 }
 
 func convertJoints(joints []*normvla.JointReader) []Joint {

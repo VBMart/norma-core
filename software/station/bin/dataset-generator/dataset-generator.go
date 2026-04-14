@@ -163,10 +163,13 @@ func runProcessing(program *tea.Program, params internal.Params) error {
 		if program != nil && count%500 == 0 {
 			currentPos, err := uintn.FromLEBytes(frame.GetGlobalFrameId())
 			if err == nil {
+				skipCount, skipReason := detector.GetSkipInfo()
 				program.Send(internal.ProgressMsg{
-					Current:         currentPos,
-					Total:           bounds.To,
-					FramesProcessed: count,
+					Current:          currentPos,
+					Total:            bounds.To,
+					FramesProcessed:  count,
+					FramesSkipped:    skipCount,
+					FramesSkipReason: skipReason,
 				})
 			}
 		}
@@ -186,10 +189,13 @@ func runProcessing(program *tea.Program, params internal.Params) error {
 
 	// Send final progress update to ensure 100% is shown
 	if program != nil {
+		skipCount, skipReason := detector.GetSkipInfo()
 		program.Send(internal.ProgressMsg{
-			Current:         params.To,
-			Total:           params.To,
-			FramesProcessed: count,
+			Current:          params.To,
+			Total:            params.To,
+			FramesProcessed:  count,
+			FramesSkipped:    skipCount,
+			FramesSkipReason: skipReason,
 		})
 	}
 

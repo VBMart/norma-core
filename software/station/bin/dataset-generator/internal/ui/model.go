@@ -31,6 +31,8 @@ type Model struct {
 	current uintn.UintN
 
 	framesProcessed     uint64
+	framesSkipped       uint64
+	framesSkipReason    string
 	episodeCount        uint64
 	episodesDiscarded   uint64
 	discardedReasons    []string
@@ -91,6 +93,13 @@ func (m Model) PrintSummary() {
 	}
 	fmt.Printf("Total frames saved: %d\n", m.totalFramesSaved)
 	fmt.Printf("Frames processed: %d\n", m.framesProcessed)
+	if m.framesSkipped > 0 {
+		if m.framesSkipReason != "" {
+			fmt.Printf("⚠️  Frames skipped: %d (%s)\n", m.framesSkipped, m.framesSkipReason)
+		} else {
+			fmt.Printf("⚠️  Frames skipped: %d\n", m.framesSkipped)
+		}
+	}
 	fmt.Printf("Rate: %.0f frames/sec\n", rate)
 	fmt.Printf("Elapsed: %s\n", formatDuration(elapsed))
 	fmt.Printf("Output: %s\n", m.params.Output)
@@ -128,6 +137,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case internal.ProgressMsg:
 		m.current = msg.Current
 		m.framesProcessed = msg.FramesProcessed
+		m.framesSkipped = msg.FramesSkipped
+		m.framesSkipReason = msg.FramesSkipReason
 
 	case internal.EpisodeStartedMsg:
 		m.currentEpisodeIndex = msg.Index

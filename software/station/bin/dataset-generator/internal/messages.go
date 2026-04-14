@@ -8,9 +8,11 @@ import (
 
 // ProgressMsg updates the progress bar and frame count
 type ProgressMsg struct {
-	Current         uintn.UintN
-	Total           uintn.UintN
-	FramesProcessed uint64
+	Current            uintn.UintN
+	Total              uintn.UintN
+	FramesProcessed    uint64
+	FramesSkipped      uint64
+	FramesSkipReason   string
 }
 
 // EpisodeStartedMsg signals an episode started
