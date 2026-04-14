@@ -9,10 +9,12 @@ import React, {
 import HistoryTimelineTrack, { Tick } from './HistoryTimelineTrack';
 import TickLabel from './TickLabel';
 import { TimelineState, TimelineActions } from '../hooks/useTimelineState';
+import { StartupMarker } from '../hooks/useStartupMarkers';
 
 interface TimelineProps {
   state: TimelineState;
   actions: TimelineActions;
+  startups?: StartupMarker[];
 }
 
 const useFrameToPercent = (minFrame: number, maxFrame: number) => {
@@ -32,6 +34,7 @@ const TimelineTrackWithOverlay = memo(function TimelineTrackWithOverlay({
   ticks,
   selectionRange,
   currentFrame,
+  startups,
   onMouseDown,
   tracksRef,
 }: {
@@ -40,6 +43,7 @@ const TimelineTrackWithOverlay = memo(function TimelineTrackWithOverlay({
   ticks: Tick[];
   selectionRange: { start: number; end: number } | null;
   currentFrame: number;
+  startups: StartupMarker[];
   onMouseDown: (e: React.MouseEvent<HTMLDivElement>) => void;
   tracksRef: React.RefObject<HTMLDivElement | null>;
 }) {
@@ -80,6 +84,32 @@ const TimelineTrackWithOverlay = memo(function TimelineTrackWithOverlay({
           <div className="absolute -top-2 left-1/2 -translate-x-1/2 w-4 h-4 rounded-full bg-green-500 border-2 border-white" />
         </div>
       )}
+
+      {startups.map((s) => {
+        if (s.frame < minFrame || s.frame > maxFrame) return null;
+        const percent = frameToPercent(s.frame);
+        const labelAlign =
+          percent < 10
+            ? 'left-0 translate-x-0'
+            : percent > 90
+            ? 'right-0 translate-x-0 left-auto'
+            : 'left-1/2 -translate-x-1/2';
+        return (
+          <div
+            key={`startup-${s.startupId || s.appStartId}-${s.frame}`}
+            className="absolute top-0 bottom-0 w-0.5 bg-orange-500 pointer-events-none z-20"
+            style={{ left: `${percent}%` }}
+          >
+            <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 rounded-full bg-orange-500" />
+            <div
+              className={`absolute -top-5 ${labelAlign} text-[10px] leading-none text-orange-300 font-mono whitespace-nowrap pointer-events-none`}
+              title={`Startup #${s.startupId} @ ${s.frame} • app_start_id ${s.appStartId} • ${s.version} (${s.gitHash})`}
+            >
+              #{s.startupId}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 });
@@ -109,9 +139,25 @@ const TickLabelsContainer = memo(function TickLabelsContainer({
   );
 });
 
-const Timeline: React.FC<TimelineProps> = ({ state, actions }) => {
-  const { currentFrame, range, selection, isZoomed } = state;
+const EMPTY_STARTUPS: StartupMarker[] = [];
+
+const Timeline: React.FC<TimelineProps> = ({ state, actions, startups = EMPTY_STARTUPS }) => {
+  const { currentFrame, range, originalRange, selection, isZoomed } = state;
   const { selectFrame, zoomToRange, resetZoom } = actions;
+
+  const lastStartupFrame = useMemo(() => {
+    if (startups.length === 0) return null;
+    let max = -Infinity;
+    for (const s of startups) {
+      if (s.frame > max) max = s.frame;
+    }
+    return Number.isFinite(max) ? max : null;
+  }, [startups]);
+
+  const handleZoomFromLastStartup = useCallback(() => {
+    if (lastStartupFrame === null) return;
+    zoomToRange(lastStartupFrame, originalRange.max);
+  }, [lastStartupFrame, originalRange.max, zoomToRange]);
 
   const [isDragging, setIsDragging] = useState(false);
   const [localSelection, setLocalSelection] = useState<{ start: number; end: number } | null>(null);
@@ -242,13 +288,21 @@ const Timeline: React.FC<TimelineProps> = ({ state, actions }) => {
 
   return (
     <div className="w-full">
-      <div className="flex items-center mb-2">
+      <div className="flex items-center gap-2 mb-2">
         {isZoomed && (
           <button
             onClick={resetZoom}
             className="text-white bg-blue-500 hover:bg-blue-700 rounded px-2 py-1 text-xs"
           >
             Reset Zoom
+          </button>
+        )}
+        {lastStartupFrame !== null && (
+          <button
+            onClick={handleZoomFromLastStartup}
+            className="text-white bg-orange-600 hover:bg-orange-500 rounded px-2 py-1 text-xs"
+          >
+            From last startup
           </button>
         )}
       </div>
@@ -260,6 +314,7 @@ const Timeline: React.FC<TimelineProps> = ({ state, actions }) => {
           ticks={ticks}
           selectionRange={displaySelection}
           currentFrame={currentFrame}
+          startups={startups}
           onMouseDown={handleMouseDown}
           tracksRef={tracksRef}
         />

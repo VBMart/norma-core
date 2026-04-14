@@ -7,8 +7,10 @@ use normfs::NormFS;
 use tokio::sync::mpsc;
 use normfs::UintN;
 use crate::station_proto::inference::{InferenceRx, inference_rx};
+use crate::station_proto::startups::StationStartup;
 
 const QUEUE_ID: &str = "inference-states";
+const STARTUPS_QUEUE_ID: &str = "startups";
 
 pub type InferenceSignal = Arc<(Mutex<bool>, Condvar)>;
 
@@ -35,12 +37,41 @@ impl Inference {
         let queue_id = normfs.resolve(QUEUE_ID);
         normfs.ensure_queue_exists_for_write(&queue_id).await?;
 
+        let startups_queue_id = normfs.resolve(STARTUPS_QUEUE_ID);
+        normfs.ensure_queue_exists_for_write(&startups_queue_id).await?;
+
+        Ok(())
+    }
+
+    fn notify_startup(normfs: &Arc<NormFS>) -> Result<(), normfs::Error> {
+        let inference_queue_id = normfs.resolve(QUEUE_ID);
+        let inference_queue_ptr = match normfs.get_last_id(&inference_queue_id) {
+            Ok(id) => id.value_to_bytes(),
+            Err(_) => Bytes::new(),
+        };
+
+        let startup = StationStartup {
+            monotonic_stamp_ns: systime::get_monotonic_stamp_ns(),
+            local_stamp_ns: systime::get_local_stamp_ns(),
+            app_start_id: systime::get_app_start_id(),
+            station_uuid: normfs.get_instance_id_bytes(),
+            version: env!("CARGO_PKG_VERSION").to_string(),
+            git_hash: env!("GIT_HASH").to_string(),
+            inference_queue_ptr,
+        };
+
+        let startups_queue_id = normfs.resolve(STARTUPS_QUEUE_ID);
+        normfs.enqueue(&startups_queue_id, Bytes::from(startup.encode_to_vec()))?;
         Ok(())
     }
 
     pub fn start(
         normfs: Arc<NormFS>,
     ) -> Self {
+        if let Err(e) = Self::notify_startup(&normfs) {
+            log::error!("Failed to publish station startup: {:?}", e);
+        }
+
         let (shutdown_tx, mut shutdown_rx) = mpsc::unbounded_channel();
         let signal = Arc::new((Mutex::new(false), Condvar::new()));
 

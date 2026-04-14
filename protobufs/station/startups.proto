@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package startups;
+
+message StationStartup {
+    uint64 monotonic_stamp_ns = 1;
+    uint64 local_stamp_ns     = 2;
+    uint64 app_start_id       = 3;
+
+    bytes  station_uuid = 10;
+    string version      = 11;
+    string git_hash     = 12;
+
+    // UintN pointer of the inference-queue entry that corresponds to this
+    // startup. Consumers iterate the startups queue and use this to draw
+    // marks on the inference-queue timeline.
+    bytes  inference_queue_ptr = 20;
+}

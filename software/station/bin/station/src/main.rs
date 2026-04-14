@@ -22,6 +22,9 @@ pub mod station_proto {
     pub mod inference {
         pub use station_iface::iface_proto::inference::*;
     }
+    pub mod startups {
+        include!("proto/startups.rs");
+    }
 }
 
 mod queues;

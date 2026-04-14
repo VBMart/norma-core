@@ -5,7 +5,9 @@ package drivers;
 enum QueueDataType {
     QDT_SYSTEM = 0;           // queues/system.proto
     QDT_STATION_COMMANDS = 1; // commands Command
-    
+    QDT_STATION_STARTUPS   = 2; // startups.StationStartup
+    QDT_STATION_META_MARKS = 3; // station.StationMetaMark (todo)
+
     QDT_ST3215_SERIAL_TX    = 10; // commands
     QDT_ST3215_SERIAL_RX    = 11; // states
     QDT_ST3215_META         = 12; // meta

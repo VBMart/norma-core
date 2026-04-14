@@ -655,6 +655,8 @@ export const drivers = $root.drivers = (() => {
      * @enum {number}
      * @property {number} QDT_SYSTEM=0 QDT_SYSTEM value
      * @property {number} QDT_STATION_COMMANDS=1 QDT_STATION_COMMANDS value
+     * @property {number} QDT_STATION_STARTUPS=2 QDT_STATION_STARTUPS value
+     * @property {number} QDT_STATION_META_MARKS=3 QDT_STATION_META_MARKS value
      * @property {number} QDT_ST3215_SERIAL_TX=10 QDT_ST3215_SERIAL_TX value
      * @property {number} QDT_ST3215_SERIAL_RX=11 QDT_ST3215_SERIAL_RX value
      * @property {number} QDT_ST3215_META=12 QDT_ST3215_META value
@@ -669,6 +671,8 @@ export const drivers = $root.drivers = (() => {
         const valuesById = {}, values = Object.create(valuesById);
         values[valuesById[0] = "QDT_SYSTEM"] = 0;
         values[valuesById[1] = "QDT_STATION_COMMANDS"] = 1;
+        values[valuesById[2] = "QDT_STATION_STARTUPS"] = 2;
+        values[valuesById[3] = "QDT_STATION_META_MARKS"] = 3;
         values[valuesById[10] = "QDT_ST3215_SERIAL_TX"] = 10;
         values[valuesById[11] = "QDT_ST3215_SERIAL_RX"] = 11;
         values[valuesById[12] = "QDT_ST3215_META"] = 12;
@@ -1218,6 +1222,8 @@ export const inference = $root.inference = (() => {
                         return "type: enum value expected";
                     case 0:
                     case 1:
+                    case 2:
+                    case 3:
                     case 10:
                     case 11:
                     case 12:
@@ -1265,6 +1271,14 @@ export const inference = $root.inference = (() => {
                 case "QDT_STATION_COMMANDS":
                 case 1:
                     message.type = 1;
+                    break;
+                case "QDT_STATION_STARTUPS":
+                case 2:
+                    message.type = 2;
+                    break;
+                case "QDT_STATION_META_MARKS":
+                case 3:
+                    message.type = 3;
                     break;
                 case "QDT_ST3215_SERIAL_TX":
                 case 10:
@@ -1372,6 +1386,422 @@ export const inference = $root.inference = (() => {
     })();
 
     return inference;
+})();
+
+export const startups = $root.startups = (() => {
+
+    /**
+     * Namespace startups.
+     * @exports startups
+     * @namespace
+     */
+    const startups = {};
+
+    startups.StationStartup = (function() {
+
+        /**
+         * Properties of a StationStartup.
+         * @memberof startups
+         * @interface IStationStartup
+         * @property {Long|null} [monotonicStampNs] StationStartup monotonicStampNs
+         * @property {Long|null} [localStampNs] StationStartup localStampNs
+         * @property {Long|null} [appStartId] StationStartup appStartId
+         * @property {Uint8Array|null} [stationUuid] StationStartup stationUuid
+         * @property {string|null} [version] StationStartup version
+         * @property {string|null} [gitHash] StationStartup gitHash
+         * @property {Uint8Array|null} [inferenceQueuePtr] StationStartup inferenceQueuePtr
+         */
+
+        /**
+         * Constructs a new StationStartup.
+         * @memberof startups
+         * @classdesc Represents a StationStartup.
+         * @implements IStationStartup
+         * @constructor
+         * @param {startups.IStationStartup=} [properties] Properties to set
+         */
+        function StationStartup(properties) {
+            if (properties)
+                for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                    if (properties[keys[i]] != null)
+                        this[keys[i]] = properties[keys[i]];
+        }
+
+        /**
+         * StationStartup monotonicStampNs.
+         * @member {Long} monotonicStampNs
+         * @memberof startups.StationStartup
+         * @instance
+         */
+        StationStartup.prototype.monotonicStampNs = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
+
+        /**
+         * StationStartup localStampNs.
+         * @member {Long} localStampNs
+         * @memberof startups.StationStartup
+         * @instance
+         */
+        StationStartup.prototype.localStampNs = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
+
+        /**
+         * StationStartup appStartId.
+         * @member {Long} appStartId
+         * @memberof startups.StationStartup
+         * @instance
+         */
+        StationStartup.prototype.appStartId = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
+
+        /**
+         * StationStartup stationUuid.
+         * @member {Uint8Array} stationUuid
+         * @memberof startups.StationStartup
+         * @instance
+         */
+        StationStartup.prototype.stationUuid = $util.newBuffer([]);
+
+        /**
+         * StationStartup version.
+         * @member {string} version
+         * @memberof startups.StationStartup
+         * @instance
+         */
+        StationStartup.prototype.version = "";
+
+        /**
+         * StationStartup gitHash.
+         * @member {string} gitHash
+         * @memberof startups.StationStartup
+         * @instance
+         */
+        StationStartup.prototype.gitHash = "";
+
+        /**
+         * StationStartup inferenceQueuePtr.
+         * @member {Uint8Array} inferenceQueuePtr
+         * @memberof startups.StationStartup
+         * @instance
+         */
+        StationStartup.prototype.inferenceQueuePtr = $util.newBuffer([]);
+
+        /**
+         * Creates a new StationStartup instance using the specified properties.
+         * @function create
+         * @memberof startups.StationStartup
+         * @static
+         * @param {startups.IStationStartup=} [properties] Properties to set
+         * @returns {startups.StationStartup} StationStartup instance
+         */
+        StationStartup.create = function create(properties) {
+            return new StationStartup(properties);
+        };
+
+        /**
+         * Encodes the specified StationStartup message. Does not implicitly {@link startups.StationStartup.verify|verify} messages.
+         * @function encode
+         * @memberof startups.StationStartup
+         * @static
+         * @param {startups.IStationStartup} message StationStartup message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        StationStartup.encode = function encode(message, writer) {
+            if (!writer)
+                writer = $Writer.create();
+            if (message.monotonicStampNs != null && Object.hasOwnProperty.call(message, "monotonicStampNs"))
+                writer.uint32(/* id 1, wireType 0 =*/8).uint64(message.monotonicStampNs);
+            if (message.localStampNs != null && Object.hasOwnProperty.call(message, "localStampNs"))
+                writer.uint32(/* id 2, wireType 0 =*/16).uint64(message.localStampNs);
+            if (message.appStartId != null && Object.hasOwnProperty.call(message, "appStartId"))
+                writer.uint32(/* id 3, wireType 0 =*/24).uint64(message.appStartId);
+            if (message.stationUuid != null && Object.hasOwnProperty.call(message, "stationUuid"))
+                writer.uint32(/* id 10, wireType 2 =*/82).bytes(message.stationUuid);
+            if (message.version != null && Object.hasOwnProperty.call(message, "version"))
+                writer.uint32(/* id 11, wireType 2 =*/90).string(message.version);
+            if (message.gitHash != null && Object.hasOwnProperty.call(message, "gitHash"))
+                writer.uint32(/* id 12, wireType 2 =*/98).string(message.gitHash);
+            if (message.inferenceQueuePtr != null && Object.hasOwnProperty.call(message, "inferenceQueuePtr"))
+                writer.uint32(/* id 20, wireType 2 =*/162).bytes(message.inferenceQueuePtr);
+            return writer;
+        };
+
+        /**
+         * Encodes the specified StationStartup message, length delimited. Does not implicitly {@link startups.StationStartup.verify|verify} messages.
+         * @function encodeDelimited
+         * @memberof startups.StationStartup
+         * @static
+         * @param {startups.IStationStartup} message StationStartup message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        StationStartup.encodeDelimited = function encodeDelimited(message, writer) {
+            return this.encode(message, writer).ldelim();
+        };
+
+        /**
+         * Decodes a StationStartup message from the specified reader or buffer.
+         * @function decode
+         * @memberof startups.StationStartup
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @param {number} [length] Message length if known beforehand
+         * @returns {startups.StationStartup} StationStartup
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        StationStartup.decode = function decode(reader, length, error) {
+            if (!(reader instanceof $Reader))
+                reader = $Reader.create(reader);
+            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.startups.StationStartup();
+            while (reader.pos < end) {
+                let tag = reader.uint32();
+                if (tag === error)
+                    break;
+                switch (tag >>> 3) {
+                case 1: {
+                        message.monotonicStampNs = reader.uint64();
+                        break;
+                    }
+                case 2: {
+                        message.localStampNs = reader.uint64();
+                        break;
+                    }
+                case 3: {
+                        message.appStartId = reader.uint64();
+                        break;
+                    }
+                case 10: {
+                        message.stationUuid = reader.bytes();
+                        break;
+                    }
+                case 11: {
+                        message.version = reader.string();
+                        break;
+                    }
+                case 12: {
+                        message.gitHash = reader.string();
+                        break;
+                    }
+                case 20: {
+                        message.inferenceQueuePtr = reader.bytes();
+                        break;
+                    }
+                default:
+                    reader.skipType(tag & 7);
+                    break;
+                }
+            }
+            return message;
+        };
+
+        /**
+         * Decodes a StationStartup message from the specified reader or buffer, length delimited.
+         * @function decodeDelimited
+         * @memberof startups.StationStartup
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @returns {startups.StationStartup} StationStartup
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        StationStartup.decodeDelimited = function decodeDelimited(reader) {
+            if (!(reader instanceof $Reader))
+                reader = new $Reader(reader);
+            return this.decode(reader, reader.uint32());
+        };
+
+        /**
+         * Verifies a StationStartup message.
+         * @function verify
+         * @memberof startups.StationStartup
+         * @static
+         * @param {Object.<string,*>} message Plain object to verify
+         * @returns {string|null} `null` if valid, otherwise the reason why it is not
+         */
+        StationStartup.verify = function verify(message) {
+            if (typeof message !== "object" || message === null)
+                return "object expected";
+            if (message.monotonicStampNs != null && message.hasOwnProperty("monotonicStampNs"))
+                if (!$util.isInteger(message.monotonicStampNs) && !(message.monotonicStampNs && $util.isInteger(message.monotonicStampNs.low) && $util.isInteger(message.monotonicStampNs.high)))
+                    return "monotonicStampNs: integer|Long expected";
+            if (message.localStampNs != null && message.hasOwnProperty("localStampNs"))
+                if (!$util.isInteger(message.localStampNs) && !(message.localStampNs && $util.isInteger(message.localStampNs.low) && $util.isInteger(message.localStampNs.high)))
+                    return "localStampNs: integer|Long expected";
+            if (message.appStartId != null && message.hasOwnProperty("appStartId"))
+                if (!$util.isInteger(message.appStartId) && !(message.appStartId && $util.isInteger(message.appStartId.low) && $util.isInteger(message.appStartId.high)))
+                    return "appStartId: integer|Long expected";
+            if (message.stationUuid != null && message.hasOwnProperty("stationUuid"))
+                if (!(message.stationUuid && typeof message.stationUuid.length === "number" || $util.isString(message.stationUuid)))
+                    return "stationUuid: buffer expected";
+            if (message.version != null && message.hasOwnProperty("version"))
+                if (!$util.isString(message.version))
+                    return "version: string expected";
+            if (message.gitHash != null && message.hasOwnProperty("gitHash"))
+                if (!$util.isString(message.gitHash))
+                    return "gitHash: string expected";
+            if (message.inferenceQueuePtr != null && message.hasOwnProperty("inferenceQueuePtr"))
+                if (!(message.inferenceQueuePtr && typeof message.inferenceQueuePtr.length === "number" || $util.isString(message.inferenceQueuePtr)))
+                    return "inferenceQueuePtr: buffer expected";
+            return null;
+        };
+
+        /**
+         * Creates a StationStartup message from a plain object. Also converts values to their respective internal types.
+         * @function fromObject
+         * @memberof startups.StationStartup
+         * @static
+         * @param {Object.<string,*>} object Plain object
+         * @returns {startups.StationStartup} StationStartup
+         */
+        StationStartup.fromObject = function fromObject(object) {
+            if (object instanceof $root.startups.StationStartup)
+                return object;
+            let message = new $root.startups.StationStartup();
+            if (object.monotonicStampNs != null)
+                if ($util.Long)
+                    (message.monotonicStampNs = $util.Long.fromValue(object.monotonicStampNs)).unsigned = true;
+                else if (typeof object.monotonicStampNs === "string")
+                    message.monotonicStampNs = parseInt(object.monotonicStampNs, 10);
+                else if (typeof object.monotonicStampNs === "number")
+                    message.monotonicStampNs = object.monotonicStampNs;
+                else if (typeof object.monotonicStampNs === "object")
+                    message.monotonicStampNs = new $util.LongBits(object.monotonicStampNs.low >>> 0, object.monotonicStampNs.high >>> 0).toNumber(true);
+            if (object.localStampNs != null)
+                if ($util.Long)
+                    (message.localStampNs = $util.Long.fromValue(object.localStampNs)).unsigned = true;
+                else if (typeof object.localStampNs === "string")
+                    message.localStampNs = parseInt(object.localStampNs, 10);
+                else if (typeof object.localStampNs === "number")
+                    message.localStampNs = object.localStampNs;
+                else if (typeof object.localStampNs === "object")
+                    message.localStampNs = new $util.LongBits(object.localStampNs.low >>> 0, object.localStampNs.high >>> 0).toNumber(true);
+            if (object.appStartId != null)
+                if ($util.Long)
+                    (message.appStartId = $util.Long.fromValue(object.appStartId)).unsigned = true;
+                else if (typeof object.appStartId === "string")
+                    message.appStartId = parseInt(object.appStartId, 10);
+                else if (typeof object.appStartId === "number")
+                    message.appStartId = object.appStartId;
+                else if (typeof object.appStartId === "object")
+                    message.appStartId = new $util.LongBits(object.appStartId.low >>> 0, object.appStartId.high >>> 0).toNumber(true);
+            if (object.stationUuid != null)
+                if (typeof object.stationUuid === "string")
+                    $util.base64.decode(object.stationUuid, message.stationUuid = $util.newBuffer($util.base64.length(object.stationUuid)), 0);
+                else if (object.stationUuid.length >= 0)
+                    message.stationUuid = object.stationUuid;
+            if (object.version != null)
+                message.version = String(object.version);
+            if (object.gitHash != null)
+                message.gitHash = String(object.gitHash);
+            if (object.inferenceQueuePtr != null)
+                if (typeof object.inferenceQueuePtr === "string")
+                    $util.base64.decode(object.inferenceQueuePtr, message.inferenceQueuePtr = $util.newBuffer($util.base64.length(object.inferenceQueuePtr)), 0);
+                else if (object.inferenceQueuePtr.length >= 0)
+                    message.inferenceQueuePtr = object.inferenceQueuePtr;
+            return message;
+        };
+
+        /**
+         * Creates a plain object from a StationStartup message. Also converts values to other types if specified.
+         * @function toObject
+         * @memberof startups.StationStartup
+         * @static
+         * @param {startups.StationStartup} message StationStartup
+         * @param {$protobuf.IConversionOptions} [options] Conversion options
+         * @returns {Object.<string,*>} Plain object
+         */
+        StationStartup.toObject = function toObject(message, options) {
+            if (!options)
+                options = {};
+            let object = {};
+            if (options.defaults) {
+                if ($util.Long) {
+                    let long = new $util.Long(0, 0, true);
+                    object.monotonicStampNs = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                } else
+                    object.monotonicStampNs = options.longs === String ? "0" : 0;
+                if ($util.Long) {
+                    let long = new $util.Long(0, 0, true);
+                    object.localStampNs = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                } else
+                    object.localStampNs = options.longs === String ? "0" : 0;
+                if ($util.Long) {
+                    let long = new $util.Long(0, 0, true);
+                    object.appStartId = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                } else
+                    object.appStartId = options.longs === String ? "0" : 0;
+                if (options.bytes === String)
+                    object.stationUuid = "";
+                else {
+                    object.stationUuid = [];
+                    if (options.bytes !== Array)
+                        object.stationUuid = $util.newBuffer(object.stationUuid);
+                }
+                object.version = "";
+                object.gitHash = "";
+                if (options.bytes === String)
+                    object.inferenceQueuePtr = "";
+                else {
+                    object.inferenceQueuePtr = [];
+                    if (options.bytes !== Array)
+                        object.inferenceQueuePtr = $util.newBuffer(object.inferenceQueuePtr);
+                }
+            }
+            if (message.monotonicStampNs != null && message.hasOwnProperty("monotonicStampNs"))
+                if (typeof message.monotonicStampNs === "number")
+                    object.monotonicStampNs = options.longs === String ? String(message.monotonicStampNs) : message.monotonicStampNs;
+                else
+                    object.monotonicStampNs = options.longs === String ? $util.Long.prototype.toString.call(message.monotonicStampNs) : options.longs === Number ? new $util.LongBits(message.monotonicStampNs.low >>> 0, message.monotonicStampNs.high >>> 0).toNumber(true) : message.monotonicStampNs;
+            if (message.localStampNs != null && message.hasOwnProperty("localStampNs"))
+                if (typeof message.localStampNs === "number")
+                    object.localStampNs = options.longs === String ? String(message.localStampNs) : message.localStampNs;
+                else
+                    object.localStampNs = options.longs === String ? $util.Long.prototype.toString.call(message.localStampNs) : options.longs === Number ? new $util.LongBits(message.localStampNs.low >>> 0, message.localStampNs.high >>> 0).toNumber(true) : message.localStampNs;
+            if (message.appStartId != null && message.hasOwnProperty("appStartId"))
+                if (typeof message.appStartId === "number")
+                    object.appStartId = options.longs === String ? String(message.appStartId) : message.appStartId;
+                else
+                    object.appStartId = options.longs === String ? $util.Long.prototype.toString.call(message.appStartId) : options.longs === Number ? new $util.LongBits(message.appStartId.low >>> 0, message.appStartId.high >>> 0).toNumber(true) : message.appStartId;
+            if (message.stationUuid != null && message.hasOwnProperty("stationUuid"))
+                object.stationUuid = options.bytes === String ? $util.base64.encode(message.stationUuid, 0, message.stationUuid.length) : options.bytes === Array ? Array.prototype.slice.call(message.stationUuid) : message.stationUuid;
+            if (message.version != null && message.hasOwnProperty("version"))
+                object.version = message.version;
+            if (message.gitHash != null && message.hasOwnProperty("gitHash"))
+                object.gitHash = message.gitHash;
+            if (message.inferenceQueuePtr != null && message.hasOwnProperty("inferenceQueuePtr"))
+                object.inferenceQueuePtr = options.bytes === String ? $util.base64.encode(message.inferenceQueuePtr, 0, message.inferenceQueuePtr.length) : options.bytes === Array ? Array.prototype.slice.call(message.inferenceQueuePtr) : message.inferenceQueuePtr;
+            return object;
+        };
+
+        /**
+         * Converts this StationStartup to JSON.
+         * @function toJSON
+         * @memberof startups.StationStartup
+         * @instance
+         * @returns {Object.<string,*>} JSON object
+         */
+        StationStartup.prototype.toJSON = function toJSON() {
+            return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+        };
+
+        /**
+         * Gets the default type url for StationStartup
+         * @function getTypeUrl
+         * @memberof startups.StationStartup
+         * @static
+         * @param {string} [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+         * @returns {string} The default type url
+         */
+        StationStartup.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+            if (typeUrlPrefix === undefined) {
+                typeUrlPrefix = "type.googleapis.com";
+            }
+            return typeUrlPrefix + "/startups.StationStartup";
+        };
+
+        return StationStartup;
+    })();
+
+    return startups;
 })();
 
 export const st3215 = $root.st3215 = (() => {

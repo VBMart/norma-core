@@ -68,8 +68,7 @@ const St3215BusCalibrationPage: React.FC = () => {
   const calibrationState = currentBusState?.autoCalibration;
   const isCalibrating = calibrationState?.status === st3215.AutoCalibrationState.Status.IN_PROGRESS;
   const hasValidMotors = currentBusState ? [6, 8].includes(currentBusState.motors?.length || 0) : false;
-  const isElrobot = (currentBusState?.motors?.length || 0) >= 8;
-  const isSupportedRobot = hasValidMotors && !isElrobot;
+  const isSupportedRobot = hasValidMotors;
 
   // Check voltage across all motors (voltage is in 0.1V units, so 70 = 7.0V)
   const minVoltage = currentBusState?.motors?.reduce((min, motor) => {
@@ -181,8 +180,8 @@ const St3215BusCalibrationPage: React.FC = () => {
       return (
         <button
           onClick={handleAutoCalibrate}
-          disabled={isCalibrationFrozen || !hasValidMotors}
-          className={`${wideActionButtonClasses} border-2 ${isLowVoltage ? 'border-yellow-500 bg-yellow-600 shadow-yellow-500/30' : 'border-purple-500 bg-purple-600 shadow-purple-500/30'} text-white shadow-lg ${isLowVoltage ? 'hover:bg-yellow-500' : 'hover:bg-purple-500'} hover:scale-105 active:scale-95`}
+          disabled={isCalibrationFrozen || !hasValidMotors || isLowVoltage}
+          className={`${wideActionButtonClasses} border-2 ${isLowVoltage ? 'border-yellow-500 bg-yellow-600 shadow-yellow-500/30' : 'border-purple-500 bg-purple-600 shadow-purple-500/30'} text-white shadow-lg ${isLowVoltage ? '' : 'hover:bg-purple-500 hover:scale-105 active:scale-95'}`}
           style={{
             animation: isLowVoltage ? undefined : 'gentlePulse 2s ease-in-out infinite'
           }}
@@ -252,7 +251,7 @@ const St3215BusCalibrationPage: React.FC = () => {
             )}
             {isLowVoltage && hasValidMotors && (
               <div className="px-4 py-2 bg-yellow-900/30 border border-yellow-600 rounded text-yellow-400">
-                ⚠️ Low voltage detected ({(minVoltage / 10).toFixed(1)}V). Auto calibration may fail or produce inaccurate results. Recommended: 7.0V.
+                ⚠️ Low voltage detected ({(minVoltage / 10).toFixed(1)}V). Auto calibration is disabled. Please check power supply (requires at least 7.0V).
               </div>
             )}
             {calibrationState && calibrationState.status !== st3215.AutoCalibrationState.Status.IDLE && (

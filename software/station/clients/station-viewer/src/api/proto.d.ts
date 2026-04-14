@@ -235,6 +235,8 @@ export namespace drivers {
     enum QueueDataType {
         QDT_SYSTEM = 0,
         QDT_STATION_COMMANDS = 1,
+        QDT_STATION_STARTUPS = 2,
+        QDT_STATION_META_MARKS = 3,
         QDT_ST3215_SERIAL_TX = 10,
         QDT_ST3215_SERIAL_RX = 11,
         QDT_ST3215_META = 12,
@@ -481,6 +483,143 @@ export namespace inference {
              */
             public static getTypeUrl(typeUrlPrefix?: string): string;
         }
+    }
+}
+
+/** Namespace startups. */
+export namespace startups {
+
+    /** Properties of a StationStartup. */
+    interface IStationStartup {
+
+        /** StationStartup monotonicStampNs */
+        monotonicStampNs?: (Long|null);
+
+        /** StationStartup localStampNs */
+        localStampNs?: (Long|null);
+
+        /** StationStartup appStartId */
+        appStartId?: (Long|null);
+
+        /** StationStartup stationUuid */
+        stationUuid?: (Uint8Array|null);
+
+        /** StationStartup version */
+        version?: (string|null);
+
+        /** StationStartup gitHash */
+        gitHash?: (string|null);
+
+        /** StationStartup inferenceQueuePtr */
+        inferenceQueuePtr?: (Uint8Array|null);
+    }
+
+    /** Represents a StationStartup. */
+    class StationStartup implements IStationStartup {
+
+        /**
+         * Constructs a new StationStartup.
+         * @param [properties] Properties to set
+         */
+        constructor(properties?: startups.IStationStartup);
+
+        /** StationStartup monotonicStampNs. */
+        public monotonicStampNs: Long;
+
+        /** StationStartup localStampNs. */
+        public localStampNs: Long;
+
+        /** StationStartup appStartId. */
+        public appStartId: Long;
+
+        /** StationStartup stationUuid. */
+        public stationUuid: Uint8Array;
+
+        /** StationStartup version. */
+        public version: string;
+
+        /** StationStartup gitHash. */
+        public gitHash: string;
+
+        /** StationStartup inferenceQueuePtr. */
+        public inferenceQueuePtr: Uint8Array;
+
+        /**
+         * Creates a new StationStartup instance using the specified properties.
+         * @param [properties] Properties to set
+         * @returns StationStartup instance
+         */
+        public static create(properties?: startups.IStationStartup): startups.StationStartup;
+
+        /**
+         * Encodes the specified StationStartup message. Does not implicitly {@link startups.StationStartup.verify|verify} messages.
+         * @param message StationStartup message or plain object to encode
+         * @param [writer] Writer to encode to
+         * @returns Writer
+         */
+        public static encode(message: startups.IStationStartup, writer?: $protobuf.Writer): $protobuf.Writer;
+
+        /**
+         * Encodes the specified StationStartup message, length delimited. Does not implicitly {@link startups.StationStartup.verify|verify} messages.
+         * @param message StationStartup message or plain object to encode
+         * @param [writer] Writer to encode to
+         * @returns Writer
+         */
+        public static encodeDelimited(message: startups.IStationStartup, writer?: $protobuf.Writer): $protobuf.Writer;
+
+        /**
+         * Decodes a StationStartup message from the specified reader or buffer.
+         * @param reader Reader or buffer to decode from
+         * @param [length] Message length if known beforehand
+         * @returns StationStartup
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): startups.StationStartup;
+
+        /**
+         * Decodes a StationStartup message from the specified reader or buffer, length delimited.
+         * @param reader Reader or buffer to decode from
+         * @returns StationStartup
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): startups.StationStartup;
+
+        /**
+         * Verifies a StationStartup message.
+         * @param message Plain object to verify
+         * @returns `null` if valid, otherwise the reason why it is not
+         */
+        public static verify(message: { [k: string]: any }): (string|null);
+
+        /**
+         * Creates a StationStartup message from a plain object. Also converts values to their respective internal types.
+         * @param object Plain object
+         * @returns StationStartup
+         */
+        public static fromObject(object: { [k: string]: any }): startups.StationStartup;
+
+        /**
+         * Creates a plain object from a StationStartup message. Also converts values to other types if specified.
+         * @param message StationStartup
+         * @param [options] Conversion options
+         * @returns Plain object
+         */
+        public static toObject(message: startups.StationStartup, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+        /**
+         * Converts this StationStartup to JSON.
+         * @returns JSON object
+         */
+        public toJSON(): { [k: string]: any };
+
+        /**
+         * Gets the default type url for StationStartup
+         * @param [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+         * @returns The default type url
+         */
+        public static getTypeUrl(typeUrlPrefix?: string): string;
     }
 }
 

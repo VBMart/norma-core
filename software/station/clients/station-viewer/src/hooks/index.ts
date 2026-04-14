@@ -4,6 +4,7 @@ export { useConnectionStats, useConnectionStatsWithUptime } from "./useConnectio
 export { useFrameData } from "./useFrameData";
 export { useQueueEntries } from "./useQueueEntries";
 export { useTimelineState } from "./useTimelineState";
+export { useStartupMarkers } from "./useStartupMarkers";
 export { useKeyboardNavigation } from "./useKeyboardNavigation";
 export { useWakeLock } from "./useWakeLock";
 export { useBusMonitor } from "./useBusMonitor";
