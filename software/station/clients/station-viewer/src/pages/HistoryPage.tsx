@@ -6,7 +6,7 @@ import { formatPtrBytes } from '@/utils/format-bytes';
 import HistoryElement from '@/components/history/HistoryElement';
 import Timeline from '@/components/Timeline';
 import TimelineControls from '@/components/TimelineControls';
-import { useFrameData, useTimelineState, useKeyboardNavigation, useStartupMarkers, TimelineControlsRef } from '@/hooks';
+import { useFrameData, useTimelineState, useKeyboardNavigation, useStartupMarkers, useInferenceTags, TimelineControlsRef } from '@/hooks';
 
 export const MAX_INITIAL_ENTRIES = 500000;
 
@@ -26,6 +26,7 @@ function formatLocalTimestamp(timestampNs: Long | number | null | undefined): { 
 function HistoryPage() {
   const { state: timelineState, actions: timelineActions } = useTimelineState();
   const startups = useStartupMarkers();
+  const tags = useInferenceTags();
   const timelineControlsRef = useRef<TimelineControlsRef>(null);
 
   const {
@@ -82,7 +83,7 @@ function HistoryPage() {
 
         {!timelineState.isLoading && !timelineState.error && (
           <>
-            <Timeline state={timelineState} actions={timelineActions} startups={startups} />
+            <Timeline state={timelineState} actions={timelineActions} startups={startups} tags={tags} />
             <div className="mt-3">
               <TimelineControls ref={timelineControlsRef} state={timelineState} actions={timelineActions} />
             </div>

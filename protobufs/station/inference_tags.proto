@@ -1,0 +1,29 @@
+syntax = "proto3";
+
+package inference_tags;
+
+enum CommandType {
+    CT_ADD_TAG    = 0;
+    CT_REMOVE_TAG = 1;
+}
+
+// Stored in the inference-tags/rx queue (QDT_INFERENCE_TAGS_RX). One entry
+// per add/remove event; the current set of tags for an inference state is
+// computed by replaying entries.
+message RxEnvelope {
+    uint64 monotonic_stamp_ns = 1;
+    uint64 local_stamp_ns     = 2;
+    uint64 app_start_id       = 3;
+
+    CommandType type           = 10;
+    bytes  inference_queue_ptr = 11;
+    string tag                 = 12;
+}
+
+// Routed via DriverCommand with type = STC_INFERENCE_TAG_COMMAND.
+message Command {
+    CommandType type = 1;
+
+    bytes  inference_queue_ptr = 2;
+    string tag                 = 3;
+}

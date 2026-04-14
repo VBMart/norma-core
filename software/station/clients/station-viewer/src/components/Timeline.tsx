@@ -10,11 +10,13 @@ import HistoryTimelineTrack, { Tick } from './HistoryTimelineTrack';
 import TickLabel from './TickLabel';
 import { TimelineState, TimelineActions } from '../hooks/useTimelineState';
 import { StartupMarker } from '../hooks/useStartupMarkers';
+import { TagMarker } from '../hooks/useInferenceTags';
 
 interface TimelineProps {
   state: TimelineState;
   actions: TimelineActions;
   startups?: StartupMarker[];
+  tags?: TagMarker[];
 }
 
 const useFrameToPercent = (minFrame: number, maxFrame: number) => {
@@ -35,7 +37,9 @@ const TimelineTrackWithOverlay = memo(function TimelineTrackWithOverlay({
   selectionRange,
   currentFrame,
   startups,
+  tags,
   onMouseDown,
+  onTagClick,
   tracksRef,
 }: {
   minFrame: number;
@@ -44,7 +48,9 @@ const TimelineTrackWithOverlay = memo(function TimelineTrackWithOverlay({
   selectionRange: { start: number; end: number } | null;
   currentFrame: number;
   startups: StartupMarker[];
+  tags: TagMarker[];
   onMouseDown: (e: React.MouseEvent<HTMLDivElement>) => void;
+  onTagClick: (frame: number) => void;
   tracksRef: React.RefObject<HTMLDivElement | null>;
 }) {
   const frameToPercent = useFrameToPercent(minFrame, maxFrame);
@@ -110,6 +116,25 @@ const TimelineTrackWithOverlay = memo(function TimelineTrackWithOverlay({
           </div>
         );
       })}
+
+      {tags.map((t, idx) => {
+        if (t.frame < minFrame || t.frame > maxFrame) return null;
+        const percent = frameToPercent(t.frame);
+        return (
+          <div
+            key={`tag-${idx}-${t.frame}-${t.tag}`}
+            className="absolute top-0 bottom-0 w-0.5 bg-cyan-400 z-20 cursor-pointer"
+            style={{ left: `${percent}%` }}
+            title={`@ ${t.frame}: ${t.tag}`}
+            onMouseDown={(e) => {
+              e.stopPropagation();
+              if (e.button === 0) onTagClick(t.frame);
+            }}
+          >
+            <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 rounded-full bg-cyan-400" />
+          </div>
+        );
+      })}
     </div>
   );
 });
@@ -140,8 +165,14 @@ const TickLabelsContainer = memo(function TickLabelsContainer({
 });
 
 const EMPTY_STARTUPS: StartupMarker[] = [];
+const EMPTY_TAGS: TagMarker[] = [];
 
-const Timeline: React.FC<TimelineProps> = ({ state, actions, startups = EMPTY_STARTUPS }) => {
+const Timeline: React.FC<TimelineProps> = ({
+  state,
+  actions,
+  startups = EMPTY_STARTUPS,
+  tags = EMPTY_TAGS,
+}) => {
   const { currentFrame, range, originalRange, selection, isZoomed } = state;
   const { selectFrame, zoomToRange, resetZoom } = actions;
 
@@ -315,7 +346,9 @@ const Timeline: React.FC<TimelineProps> = ({ state, actions, startups = EMPTY_ST
           selectionRange={displaySelection}
           currentFrame={currentFrame}
           startups={startups}
+          tags={tags}
           onMouseDown={handleMouseDown}
+          onTagClick={selectFrame}
           tracksRef={tracksRef}
         />
 

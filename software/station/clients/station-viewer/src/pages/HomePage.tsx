@@ -1,8 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import Long from 'long';
 import { useInferenceState, useConnectionStatsWithUptime, useLatestEntryId, useWakeLock } from "@/hooks";
 import BusViewer from "@/st3215/BusViewer";
 import AsciiRobot from "@/components/AsciiRobot";
 import { copyToClipboard } from "@/api/clipboard-utils";
+import { commandManager } from "@/api/commands";
+import { inference_tags } from "@/api/proto.js";
+import { defaultTag } from "@/utils/tag-phrases";
 
 function formatBytes(bytes: number): string {
   if (bytes === 0) return '0 B';
@@ -43,6 +47,22 @@ function HomePage() {
         .catch(err => console.error('Failed to copy entry ID:', err));
     }
   };
+
+  const handleAddTag = useCallback(async () => {
+    if (latestEntryId === null) return;
+    const tag = window.prompt('Tag for current pointer:', defaultTag());
+    if (!tag) return;
+    const ptrBytes = new Uint8Array(Long.fromNumber(latestEntryId).toBytesLE());
+    try {
+      await commandManager.sendInferenceTagCommand({
+        type: inference_tags.CommandType.CT_ADD_TAG,
+        tag,
+        inferenceQueuePtr: ptrBytes,
+      });
+    } catch (err) {
+      console.error('Failed to send tag command:', err);
+    }
+  }, [latestEntryId]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -90,6 +110,14 @@ function HomePage() {
                     Click to copy
                   </div>
                 </div>
+                <button
+                  onClick={handleAddTag}
+                  disabled={latestEntryId === null}
+                  className="px-3 py-1 bg-purple-700 hover:bg-purple-600 disabled:bg-gray-700 disabled:cursor-not-allowed text-white text-xs font-bold uppercase tracking-wide rounded border border-purple-500"
+                  title="Tag the current inference queue pointer"
+                >
+                  TAG
+                </button>
               </div>
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-mono">
                 <div className="flex items-center gap-1.5">

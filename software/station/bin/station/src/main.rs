@@ -25,10 +25,14 @@ pub mod station_proto {
     pub mod startups {
         include!("proto/startups.rs");
     }
+    pub mod inference_tags {
+        include!("proto/inference_tags.rs");
+    }
 }
 
 mod queues;
 mod inference;
+mod tags;
 mod web;
 
 const VERSION: &str = concat!(
@@ -347,6 +351,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     log::info!("Inference queue started");
 
     station.start_commands_queue().await?;
+
+    tags::start(station.normfs.clone()).await?;
 
     let inference = inference::Inference::start(
         station.normfs.clone(),

@@ -14,6 +14,7 @@ fn main() -> Result<()> {
                 "../../../../protobufs/station/opts.proto",
                 "../../../../protobufs/station/commands.proto",
                 "../../../../protobufs/station/startups.proto",
+                "../../../../protobufs/station/inference_tags.proto",
             ],
             &["../../../../protobufs/station/"],
         )?;
@@ -22,6 +23,7 @@ fn main() -> Result<()> {
     println!("cargo:rerun-if-changed=../../../../protobufs/station/opts.proto");
     println!("cargo:rerun-if-changed=../../../../protobufs/station/commands.proto");
     println!("cargo:rerun-if-changed=../../../../protobufs/station/startups.proto");
+    println!("cargo:rerun-if-changed=../../../../protobufs/station/inference_tags.proto");
 
     // Rerun if client files change
     let client_index = Path::new("../../clients/station-viewer/dist/index.html");

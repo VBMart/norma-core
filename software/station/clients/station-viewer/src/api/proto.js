@@ -188,6 +188,7 @@ export const commands = $root.commands = (() => {
                     return "type: enum value expected";
                 case 0:
                 case 1:
+                case 2:
                     break;
                 }
             if (message.body != null && message.hasOwnProperty("body"))
@@ -227,6 +228,10 @@ export const commands = $root.commands = (() => {
             case "STC_MOTOR_MIRRORING_COMMAND":
             case 1:
                 message.type = 1;
+                break;
+            case "STC_INFERENCE_TAG_COMMAND":
+            case 2:
+                message.type = 2;
                 break;
             }
             if (object.body != null)
@@ -656,7 +661,7 @@ export const drivers = $root.drivers = (() => {
      * @property {number} QDT_SYSTEM=0 QDT_SYSTEM value
      * @property {number} QDT_STATION_COMMANDS=1 QDT_STATION_COMMANDS value
      * @property {number} QDT_STATION_STARTUPS=2 QDT_STATION_STARTUPS value
-     * @property {number} QDT_STATION_META_MARKS=3 QDT_STATION_META_MARKS value
+     * @property {number} QDT_INFERENCE_TAGS_RX=3 QDT_INFERENCE_TAGS_RX value
      * @property {number} QDT_ST3215_SERIAL_TX=10 QDT_ST3215_SERIAL_TX value
      * @property {number} QDT_ST3215_SERIAL_RX=11 QDT_ST3215_SERIAL_RX value
      * @property {number} QDT_ST3215_META=12 QDT_ST3215_META value
@@ -672,7 +677,7 @@ export const drivers = $root.drivers = (() => {
         values[valuesById[0] = "QDT_SYSTEM"] = 0;
         values[valuesById[1] = "QDT_STATION_COMMANDS"] = 1;
         values[valuesById[2] = "QDT_STATION_STARTUPS"] = 2;
-        values[valuesById[3] = "QDT_STATION_META_MARKS"] = 3;
+        values[valuesById[3] = "QDT_INFERENCE_TAGS_RX"] = 3;
         values[valuesById[10] = "QDT_ST3215_SERIAL_TX"] = 10;
         values[valuesById[11] = "QDT_ST3215_SERIAL_RX"] = 11;
         values[valuesById[12] = "QDT_ST3215_META"] = 12;
@@ -691,11 +696,13 @@ export const drivers = $root.drivers = (() => {
      * @enum {number}
      * @property {number} STC_ST3215_COMMAND=0 STC_ST3215_COMMAND value
      * @property {number} STC_MOTOR_MIRRORING_COMMAND=1 STC_MOTOR_MIRRORING_COMMAND value
+     * @property {number} STC_INFERENCE_TAG_COMMAND=2 STC_INFERENCE_TAG_COMMAND value
      */
     drivers.StationCommandType = (function() {
         const valuesById = {}, values = Object.create(valuesById);
         values[valuesById[0] = "STC_ST3215_COMMAND"] = 0;
         values[valuesById[1] = "STC_MOTOR_MIRRORING_COMMAND"] = 1;
+        values[valuesById[2] = "STC_INFERENCE_TAG_COMMAND"] = 2;
         return values;
     })();
 
@@ -1276,7 +1283,7 @@ export const inference = $root.inference = (() => {
                 case 2:
                     message.type = 2;
                     break;
-                case "QDT_STATION_META_MARKS":
+                case "QDT_INFERENCE_TAGS_RX":
                 case 3:
                     message.type = 3;
                     break;
@@ -1802,6 +1809,703 @@ export const startups = $root.startups = (() => {
     })();
 
     return startups;
+})();
+
+export const inference_tags = $root.inference_tags = (() => {
+
+    /**
+     * Namespace inference_tags.
+     * @exports inference_tags
+     * @namespace
+     */
+    const inference_tags = {};
+
+    /**
+     * CommandType enum.
+     * @name inference_tags.CommandType
+     * @enum {number}
+     * @property {number} CT_ADD_TAG=0 CT_ADD_TAG value
+     * @property {number} CT_REMOVE_TAG=1 CT_REMOVE_TAG value
+     */
+    inference_tags.CommandType = (function() {
+        const valuesById = {}, values = Object.create(valuesById);
+        values[valuesById[0] = "CT_ADD_TAG"] = 0;
+        values[valuesById[1] = "CT_REMOVE_TAG"] = 1;
+        return values;
+    })();
+
+    inference_tags.RxEnvelope = (function() {
+
+        /**
+         * Properties of a RxEnvelope.
+         * @memberof inference_tags
+         * @interface IRxEnvelope
+         * @property {Long|null} [monotonicStampNs] RxEnvelope monotonicStampNs
+         * @property {Long|null} [localStampNs] RxEnvelope localStampNs
+         * @property {Long|null} [appStartId] RxEnvelope appStartId
+         * @property {inference_tags.CommandType|null} [type] RxEnvelope type
+         * @property {Uint8Array|null} [inferenceQueuePtr] RxEnvelope inferenceQueuePtr
+         * @property {string|null} [tag] RxEnvelope tag
+         */
+
+        /**
+         * Constructs a new RxEnvelope.
+         * @memberof inference_tags
+         * @classdesc Represents a RxEnvelope.
+         * @implements IRxEnvelope
+         * @constructor
+         * @param {inference_tags.IRxEnvelope=} [properties] Properties to set
+         */
+        function RxEnvelope(properties) {
+            if (properties)
+                for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                    if (properties[keys[i]] != null)
+                        this[keys[i]] = properties[keys[i]];
+        }
+
+        /**
+         * RxEnvelope monotonicStampNs.
+         * @member {Long} monotonicStampNs
+         * @memberof inference_tags.RxEnvelope
+         * @instance
+         */
+        RxEnvelope.prototype.monotonicStampNs = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
+
+        /**
+         * RxEnvelope localStampNs.
+         * @member {Long} localStampNs
+         * @memberof inference_tags.RxEnvelope
+         * @instance
+         */
+        RxEnvelope.prototype.localStampNs = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
+
+        /**
+         * RxEnvelope appStartId.
+         * @member {Long} appStartId
+         * @memberof inference_tags.RxEnvelope
+         * @instance
+         */
+        RxEnvelope.prototype.appStartId = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
+
+        /**
+         * RxEnvelope type.
+         * @member {inference_tags.CommandType} type
+         * @memberof inference_tags.RxEnvelope
+         * @instance
+         */
+        RxEnvelope.prototype.type = 0;
+
+        /**
+         * RxEnvelope inferenceQueuePtr.
+         * @member {Uint8Array} inferenceQueuePtr
+         * @memberof inference_tags.RxEnvelope
+         * @instance
+         */
+        RxEnvelope.prototype.inferenceQueuePtr = $util.newBuffer([]);
+
+        /**
+         * RxEnvelope tag.
+         * @member {string} tag
+         * @memberof inference_tags.RxEnvelope
+         * @instance
+         */
+        RxEnvelope.prototype.tag = "";
+
+        /**
+         * Creates a new RxEnvelope instance using the specified properties.
+         * @function create
+         * @memberof inference_tags.RxEnvelope
+         * @static
+         * @param {inference_tags.IRxEnvelope=} [properties] Properties to set
+         * @returns {inference_tags.RxEnvelope} RxEnvelope instance
+         */
+        RxEnvelope.create = function create(properties) {
+            return new RxEnvelope(properties);
+        };
+
+        /**
+         * Encodes the specified RxEnvelope message. Does not implicitly {@link inference_tags.RxEnvelope.verify|verify} messages.
+         * @function encode
+         * @memberof inference_tags.RxEnvelope
+         * @static
+         * @param {inference_tags.IRxEnvelope} message RxEnvelope message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        RxEnvelope.encode = function encode(message, writer) {
+            if (!writer)
+                writer = $Writer.create();
+            if (message.monotonicStampNs != null && Object.hasOwnProperty.call(message, "monotonicStampNs"))
+                writer.uint32(/* id 1, wireType 0 =*/8).uint64(message.monotonicStampNs);
+            if (message.localStampNs != null && Object.hasOwnProperty.call(message, "localStampNs"))
+                writer.uint32(/* id 2, wireType 0 =*/16).uint64(message.localStampNs);
+            if (message.appStartId != null && Object.hasOwnProperty.call(message, "appStartId"))
+                writer.uint32(/* id 3, wireType 0 =*/24).uint64(message.appStartId);
+            if (message.type != null && Object.hasOwnProperty.call(message, "type"))
+                writer.uint32(/* id 10, wireType 0 =*/80).int32(message.type);
+            if (message.inferenceQueuePtr != null && Object.hasOwnProperty.call(message, "inferenceQueuePtr"))
+                writer.uint32(/* id 11, wireType 2 =*/90).bytes(message.inferenceQueuePtr);
+            if (message.tag != null && Object.hasOwnProperty.call(message, "tag"))
+                writer.uint32(/* id 12, wireType 2 =*/98).string(message.tag);
+            return writer;
+        };
+
+        /**
+         * Encodes the specified RxEnvelope message, length delimited. Does not implicitly {@link inference_tags.RxEnvelope.verify|verify} messages.
+         * @function encodeDelimited
+         * @memberof inference_tags.RxEnvelope
+         * @static
+         * @param {inference_tags.IRxEnvelope} message RxEnvelope message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        RxEnvelope.encodeDelimited = function encodeDelimited(message, writer) {
+            return this.encode(message, writer).ldelim();
+        };
+
+        /**
+         * Decodes a RxEnvelope message from the specified reader or buffer.
+         * @function decode
+         * @memberof inference_tags.RxEnvelope
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @param {number} [length] Message length if known beforehand
+         * @returns {inference_tags.RxEnvelope} RxEnvelope
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        RxEnvelope.decode = function decode(reader, length, error) {
+            if (!(reader instanceof $Reader))
+                reader = $Reader.create(reader);
+            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.inference_tags.RxEnvelope();
+            while (reader.pos < end) {
+                let tag = reader.uint32();
+                if (tag === error)
+                    break;
+                switch (tag >>> 3) {
+                case 1: {
+                        message.monotonicStampNs = reader.uint64();
+                        break;
+                    }
+                case 2: {
+                        message.localStampNs = reader.uint64();
+                        break;
+                    }
+                case 3: {
+                        message.appStartId = reader.uint64();
+                        break;
+                    }
+                case 10: {
+                        message.type = reader.int32();
+                        break;
+                    }
+                case 11: {
+                        message.inferenceQueuePtr = reader.bytes();
+                        break;
+                    }
+                case 12: {
+                        message.tag = reader.string();
+                        break;
+                    }
+                default:
+                    reader.skipType(tag & 7);
+                    break;
+                }
+            }
+            return message;
+        };
+
+        /**
+         * Decodes a RxEnvelope message from the specified reader or buffer, length delimited.
+         * @function decodeDelimited
+         * @memberof inference_tags.RxEnvelope
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @returns {inference_tags.RxEnvelope} RxEnvelope
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        RxEnvelope.decodeDelimited = function decodeDelimited(reader) {
+            if (!(reader instanceof $Reader))
+                reader = new $Reader(reader);
+            return this.decode(reader, reader.uint32());
+        };
+
+        /**
+         * Verifies a RxEnvelope message.
+         * @function verify
+         * @memberof inference_tags.RxEnvelope
+         * @static
+         * @param {Object.<string,*>} message Plain object to verify
+         * @returns {string|null} `null` if valid, otherwise the reason why it is not
+         */
+        RxEnvelope.verify = function verify(message) {
+            if (typeof message !== "object" || message === null)
+                return "object expected";
+            if (message.monotonicStampNs != null && message.hasOwnProperty("monotonicStampNs"))
+                if (!$util.isInteger(message.monotonicStampNs) && !(message.monotonicStampNs && $util.isInteger(message.monotonicStampNs.low) && $util.isInteger(message.monotonicStampNs.high)))
+                    return "monotonicStampNs: integer|Long expected";
+            if (message.localStampNs != null && message.hasOwnProperty("localStampNs"))
+                if (!$util.isInteger(message.localStampNs) && !(message.localStampNs && $util.isInteger(message.localStampNs.low) && $util.isInteger(message.localStampNs.high)))
+                    return "localStampNs: integer|Long expected";
+            if (message.appStartId != null && message.hasOwnProperty("appStartId"))
+                if (!$util.isInteger(message.appStartId) && !(message.appStartId && $util.isInteger(message.appStartId.low) && $util.isInteger(message.appStartId.high)))
+                    return "appStartId: integer|Long expected";
+            if (message.type != null && message.hasOwnProperty("type"))
+                switch (message.type) {
+                default:
+                    return "type: enum value expected";
+                case 0:
+                case 1:
+                    break;
+                }
+            if (message.inferenceQueuePtr != null && message.hasOwnProperty("inferenceQueuePtr"))
+                if (!(message.inferenceQueuePtr && typeof message.inferenceQueuePtr.length === "number" || $util.isString(message.inferenceQueuePtr)))
+                    return "inferenceQueuePtr: buffer expected";
+            if (message.tag != null && message.hasOwnProperty("tag"))
+                if (!$util.isString(message.tag))
+                    return "tag: string expected";
+            return null;
+        };
+
+        /**
+         * Creates a RxEnvelope message from a plain object. Also converts values to their respective internal types.
+         * @function fromObject
+         * @memberof inference_tags.RxEnvelope
+         * @static
+         * @param {Object.<string,*>} object Plain object
+         * @returns {inference_tags.RxEnvelope} RxEnvelope
+         */
+        RxEnvelope.fromObject = function fromObject(object) {
+            if (object instanceof $root.inference_tags.RxEnvelope)
+                return object;
+            let message = new $root.inference_tags.RxEnvelope();
+            if (object.monotonicStampNs != null)
+                if ($util.Long)
+                    (message.monotonicStampNs = $util.Long.fromValue(object.monotonicStampNs)).unsigned = true;
+                else if (typeof object.monotonicStampNs === "string")
+                    message.monotonicStampNs = parseInt(object.monotonicStampNs, 10);
+                else if (typeof object.monotonicStampNs === "number")
+                    message.monotonicStampNs = object.monotonicStampNs;
+                else if (typeof object.monotonicStampNs === "object")
+                    message.monotonicStampNs = new $util.LongBits(object.monotonicStampNs.low >>> 0, object.monotonicStampNs.high >>> 0).toNumber(true);
+            if (object.localStampNs != null)
+                if ($util.Long)
+                    (message.localStampNs = $util.Long.fromValue(object.localStampNs)).unsigned = true;
+                else if (typeof object.localStampNs === "string")
+                    message.localStampNs = parseInt(object.localStampNs, 10);
+                else if (typeof object.localStampNs === "number")
+                    message.localStampNs = object.localStampNs;
+                else if (typeof object.localStampNs === "object")
+                    message.localStampNs = new $util.LongBits(object.localStampNs.low >>> 0, object.localStampNs.high >>> 0).toNumber(true);
+            if (object.appStartId != null)
+                if ($util.Long)
+                    (message.appStartId = $util.Long.fromValue(object.appStartId)).unsigned = true;
+                else if (typeof object.appStartId === "string")
+                    message.appStartId = parseInt(object.appStartId, 10);
+                else if (typeof object.appStartId === "number")
+                    message.appStartId = object.appStartId;
+                else if (typeof object.appStartId === "object")
+                    message.appStartId = new $util.LongBits(object.appStartId.low >>> 0, object.appStartId.high >>> 0).toNumber(true);
+            switch (object.type) {
+            default:
+                if (typeof object.type === "number") {
+                    message.type = object.type;
+                    break;
+                }
+                break;
+            case "CT_ADD_TAG":
+            case 0:
+                message.type = 0;
+                break;
+            case "CT_REMOVE_TAG":
+            case 1:
+                message.type = 1;
+                break;
+            }
+            if (object.inferenceQueuePtr != null)
+                if (typeof object.inferenceQueuePtr === "string")
+                    $util.base64.decode(object.inferenceQueuePtr, message.inferenceQueuePtr = $util.newBuffer($util.base64.length(object.inferenceQueuePtr)), 0);
+                else if (object.inferenceQueuePtr.length >= 0)
+                    message.inferenceQueuePtr = object.inferenceQueuePtr;
+            if (object.tag != null)
+                message.tag = String(object.tag);
+            return message;
+        };
+
+        /**
+         * Creates a plain object from a RxEnvelope message. Also converts values to other types if specified.
+         * @function toObject
+         * @memberof inference_tags.RxEnvelope
+         * @static
+         * @param {inference_tags.RxEnvelope} message RxEnvelope
+         * @param {$protobuf.IConversionOptions} [options] Conversion options
+         * @returns {Object.<string,*>} Plain object
+         */
+        RxEnvelope.toObject = function toObject(message, options) {
+            if (!options)
+                options = {};
+            let object = {};
+            if (options.defaults) {
+                if ($util.Long) {
+                    let long = new $util.Long(0, 0, true);
+                    object.monotonicStampNs = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                } else
+                    object.monotonicStampNs = options.longs === String ? "0" : 0;
+                if ($util.Long) {
+                    let long = new $util.Long(0, 0, true);
+                    object.localStampNs = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                } else
+                    object.localStampNs = options.longs === String ? "0" : 0;
+                if ($util.Long) {
+                    let long = new $util.Long(0, 0, true);
+                    object.appStartId = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                } else
+                    object.appStartId = options.longs === String ? "0" : 0;
+                object.type = options.enums === String ? "CT_ADD_TAG" : 0;
+                if (options.bytes === String)
+                    object.inferenceQueuePtr = "";
+                else {
+                    object.inferenceQueuePtr = [];
+                    if (options.bytes !== Array)
+                        object.inferenceQueuePtr = $util.newBuffer(object.inferenceQueuePtr);
+                }
+                object.tag = "";
+            }
+            if (message.monotonicStampNs != null && message.hasOwnProperty("monotonicStampNs"))
+                if (typeof message.monotonicStampNs === "number")
+                    object.monotonicStampNs = options.longs === String ? String(message.monotonicStampNs) : message.monotonicStampNs;
+                else
+                    object.monotonicStampNs = options.longs === String ? $util.Long.prototype.toString.call(message.monotonicStampNs) : options.longs === Number ? new $util.LongBits(message.monotonicStampNs.low >>> 0, message.monotonicStampNs.high >>> 0).toNumber(true) : message.monotonicStampNs;
+            if (message.localStampNs != null && message.hasOwnProperty("localStampNs"))
+                if (typeof message.localStampNs === "number")
+                    object.localStampNs = options.longs === String ? String(message.localStampNs) : message.localStampNs;
+                else
+                    object.localStampNs = options.longs === String ? $util.Long.prototype.toString.call(message.localStampNs) : options.longs === Number ? new $util.LongBits(message.localStampNs.low >>> 0, message.localStampNs.high >>> 0).toNumber(true) : message.localStampNs;
+            if (message.appStartId != null && message.hasOwnProperty("appStartId"))
+                if (typeof message.appStartId === "number")
+                    object.appStartId = options.longs === String ? String(message.appStartId) : message.appStartId;
+                else
+                    object.appStartId = options.longs === String ? $util.Long.prototype.toString.call(message.appStartId) : options.longs === Number ? new $util.LongBits(message.appStartId.low >>> 0, message.appStartId.high >>> 0).toNumber(true) : message.appStartId;
+            if (message.type != null && message.hasOwnProperty("type"))
+                object.type = options.enums === String ? $root.inference_tags.CommandType[message.type] === undefined ? message.type : $root.inference_tags.CommandType[message.type] : message.type;
+            if (message.inferenceQueuePtr != null && message.hasOwnProperty("inferenceQueuePtr"))
+                object.inferenceQueuePtr = options.bytes === String ? $util.base64.encode(message.inferenceQueuePtr, 0, message.inferenceQueuePtr.length) : options.bytes === Array ? Array.prototype.slice.call(message.inferenceQueuePtr) : message.inferenceQueuePtr;
+            if (message.tag != null && message.hasOwnProperty("tag"))
+                object.tag = message.tag;
+            return object;
+        };
+
+        /**
+         * Converts this RxEnvelope to JSON.
+         * @function toJSON
+         * @memberof inference_tags.RxEnvelope
+         * @instance
+         * @returns {Object.<string,*>} JSON object
+         */
+        RxEnvelope.prototype.toJSON = function toJSON() {
+            return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+        };
+
+        /**
+         * Gets the default type url for RxEnvelope
+         * @function getTypeUrl
+         * @memberof inference_tags.RxEnvelope
+         * @static
+         * @param {string} [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+         * @returns {string} The default type url
+         */
+        RxEnvelope.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+            if (typeUrlPrefix === undefined) {
+                typeUrlPrefix = "type.googleapis.com";
+            }
+            return typeUrlPrefix + "/inference_tags.RxEnvelope";
+        };
+
+        return RxEnvelope;
+    })();
+
+    inference_tags.Command = (function() {
+
+        /**
+         * Properties of a Command.
+         * @memberof inference_tags
+         * @interface ICommand
+         * @property {inference_tags.CommandType|null} [type] Command type
+         * @property {Uint8Array|null} [inferenceQueuePtr] Command inferenceQueuePtr
+         * @property {string|null} [tag] Command tag
+         */
+
+        /**
+         * Constructs a new Command.
+         * @memberof inference_tags
+         * @classdesc Represents a Command.
+         * @implements ICommand
+         * @constructor
+         * @param {inference_tags.ICommand=} [properties] Properties to set
+         */
+        function Command(properties) {
+            if (properties)
+                for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                    if (properties[keys[i]] != null)
+                        this[keys[i]] = properties[keys[i]];
+        }
+
+        /**
+         * Command type.
+         * @member {inference_tags.CommandType} type
+         * @memberof inference_tags.Command
+         * @instance
+         */
+        Command.prototype.type = 0;
+
+        /**
+         * Command inferenceQueuePtr.
+         * @member {Uint8Array} inferenceQueuePtr
+         * @memberof inference_tags.Command
+         * @instance
+         */
+        Command.prototype.inferenceQueuePtr = $util.newBuffer([]);
+
+        /**
+         * Command tag.
+         * @member {string} tag
+         * @memberof inference_tags.Command
+         * @instance
+         */
+        Command.prototype.tag = "";
+
+        /**
+         * Creates a new Command instance using the specified properties.
+         * @function create
+         * @memberof inference_tags.Command
+         * @static
+         * @param {inference_tags.ICommand=} [properties] Properties to set
+         * @returns {inference_tags.Command} Command instance
+         */
+        Command.create = function create(properties) {
+            return new Command(properties);
+        };
+
+        /**
+         * Encodes the specified Command message. Does not implicitly {@link inference_tags.Command.verify|verify} messages.
+         * @function encode
+         * @memberof inference_tags.Command
+         * @static
+         * @param {inference_tags.ICommand} message Command message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        Command.encode = function encode(message, writer) {
+            if (!writer)
+                writer = $Writer.create();
+            if (message.type != null && Object.hasOwnProperty.call(message, "type"))
+                writer.uint32(/* id 1, wireType 0 =*/8).int32(message.type);
+            if (message.inferenceQueuePtr != null && Object.hasOwnProperty.call(message, "inferenceQueuePtr"))
+                writer.uint32(/* id 2, wireType 2 =*/18).bytes(message.inferenceQueuePtr);
+            if (message.tag != null && Object.hasOwnProperty.call(message, "tag"))
+                writer.uint32(/* id 3, wireType 2 =*/26).string(message.tag);
+            return writer;
+        };
+
+        /**
+         * Encodes the specified Command message, length delimited. Does not implicitly {@link inference_tags.Command.verify|verify} messages.
+         * @function encodeDelimited
+         * @memberof inference_tags.Command
+         * @static
+         * @param {inference_tags.ICommand} message Command message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        Command.encodeDelimited = function encodeDelimited(message, writer) {
+            return this.encode(message, writer).ldelim();
+        };
+
+        /**
+         * Decodes a Command message from the specified reader or buffer.
+         * @function decode
+         * @memberof inference_tags.Command
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @param {number} [length] Message length if known beforehand
+         * @returns {inference_tags.Command} Command
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        Command.decode = function decode(reader, length, error) {
+            if (!(reader instanceof $Reader))
+                reader = $Reader.create(reader);
+            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.inference_tags.Command();
+            while (reader.pos < end) {
+                let tag = reader.uint32();
+                if (tag === error)
+                    break;
+                switch (tag >>> 3) {
+                case 1: {
+                        message.type = reader.int32();
+                        break;
+                    }
+                case 2: {
+                        message.inferenceQueuePtr = reader.bytes();
+                        break;
+                    }
+                case 3: {
+                        message.tag = reader.string();
+                        break;
+                    }
+                default:
+                    reader.skipType(tag & 7);
+                    break;
+                }
+            }
+            return message;
+        };
+
+        /**
+         * Decodes a Command message from the specified reader or buffer, length delimited.
+         * @function decodeDelimited
+         * @memberof inference_tags.Command
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @returns {inference_tags.Command} Command
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        Command.decodeDelimited = function decodeDelimited(reader) {
+            if (!(reader instanceof $Reader))
+                reader = new $Reader(reader);
+            return this.decode(reader, reader.uint32());
+        };
+
+        /**
+         * Verifies a Command message.
+         * @function verify
+         * @memberof inference_tags.Command
+         * @static
+         * @param {Object.<string,*>} message Plain object to verify
+         * @returns {string|null} `null` if valid, otherwise the reason why it is not
+         */
+        Command.verify = function verify(message) {
+            if (typeof message !== "object" || message === null)
+                return "object expected";
+            if (message.type != null && message.hasOwnProperty("type"))
+                switch (message.type) {
+                default:
+                    return "type: enum value expected";
+                case 0:
+                case 1:
+                    break;
+                }
+            if (message.inferenceQueuePtr != null && message.hasOwnProperty("inferenceQueuePtr"))
+                if (!(message.inferenceQueuePtr && typeof message.inferenceQueuePtr.length === "number" || $util.isString(message.inferenceQueuePtr)))
+                    return "inferenceQueuePtr: buffer expected";
+            if (message.tag != null && message.hasOwnProperty("tag"))
+                if (!$util.isString(message.tag))
+                    return "tag: string expected";
+            return null;
+        };
+
+        /**
+         * Creates a Command message from a plain object. Also converts values to their respective internal types.
+         * @function fromObject
+         * @memberof inference_tags.Command
+         * @static
+         * @param {Object.<string,*>} object Plain object
+         * @returns {inference_tags.Command} Command
+         */
+        Command.fromObject = function fromObject(object) {
+            if (object instanceof $root.inference_tags.Command)
+                return object;
+            let message = new $root.inference_tags.Command();
+            switch (object.type) {
+            default:
+                if (typeof object.type === "number") {
+                    message.type = object.type;
+                    break;
+                }
+                break;
+            case "CT_ADD_TAG":
+            case 0:
+                message.type = 0;
+                break;
+            case "CT_REMOVE_TAG":
+            case 1:
+                message.type = 1;
+                break;
+            }
+            if (object.inferenceQueuePtr != null)
+                if (typeof object.inferenceQueuePtr === "string")
+                    $util.base64.decode(object.inferenceQueuePtr, message.inferenceQueuePtr = $util.newBuffer($util.base64.length(object.inferenceQueuePtr)), 0);
+                else if (object.inferenceQueuePtr.length >= 0)
+                    message.inferenceQueuePtr = object.inferenceQueuePtr;
+            if (object.tag != null)
+                message.tag = String(object.tag);
+            return message;
+        };
+
+        /**
+         * Creates a plain object from a Command message. Also converts values to other types if specified.
+         * @function toObject
+         * @memberof inference_tags.Command
+         * @static
+         * @param {inference_tags.Command} message Command
+         * @param {$protobuf.IConversionOptions} [options] Conversion options
+         * @returns {Object.<string,*>} Plain object
+         */
+        Command.toObject = function toObject(message, options) {
+            if (!options)
+                options = {};
+            let object = {};
+            if (options.defaults) {
+                object.type = options.enums === String ? "CT_ADD_TAG" : 0;
+                if (options.bytes === String)
+                    object.inferenceQueuePtr = "";
+                else {
+                    object.inferenceQueuePtr = [];
+                    if (options.bytes !== Array)
+                        object.inferenceQueuePtr = $util.newBuffer(object.inferenceQueuePtr);
+                }
+                object.tag = "";
+            }
+            if (message.type != null && message.hasOwnProperty("type"))
+                object.type = options.enums === String ? $root.inference_tags.CommandType[message.type] === undefined ? message.type : $root.inference_tags.CommandType[message.type] : message.type;
+            if (message.inferenceQueuePtr != null && message.hasOwnProperty("inferenceQueuePtr"))
+                object.inferenceQueuePtr = options.bytes === String ? $util.base64.encode(message.inferenceQueuePtr, 0, message.inferenceQueuePtr.length) : options.bytes === Array ? Array.prototype.slice.call(message.inferenceQueuePtr) : message.inferenceQueuePtr;
+            if (message.tag != null && message.hasOwnProperty("tag"))
+                object.tag = message.tag;
+            return object;
+        };
+
+        /**
+         * Converts this Command to JSON.
+         * @function toJSON
+         * @memberof inference_tags.Command
+         * @instance
+         * @returns {Object.<string,*>} JSON object
+         */
+        Command.prototype.toJSON = function toJSON() {
+            return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+        };
+
+        /**
+         * Gets the default type url for Command
+         * @function getTypeUrl
+         * @memberof inference_tags.Command
+         * @static
+         * @param {string} [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+         * @returns {string} The default type url
+         */
+        Command.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+            if (typeUrlPrefix === undefined) {
+                typeUrlPrefix = "type.googleapis.com";
+            }
+            return typeUrlPrefix + "/inference_tags.Command";
+        };
+
+        return Command;
+    })();
+
+    return inference_tags;
 })();
 
 export const st3215 = $root.st3215 = (() => {
