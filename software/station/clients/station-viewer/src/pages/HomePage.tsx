@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import Long from 'long';
-import { useInferenceState, useConnectionStatsWithUptime, useLatestEntryId, useWakeLock } from "@/hooks";
+import { useInferenceState, useConnectionStatsWithUptime, useLatestEntryId, useWakeLock, invalidateTagsCache } from "@/hooks";
 import BusViewer from "@/st3215/BusViewer";
 import AsciiRobot from "@/components/AsciiRobot";
 import { copyToClipboard } from "@/api/clipboard-utils";
@@ -59,6 +59,7 @@ function HomePage() {
         tag,
         inferenceQueuePtr: ptrBytes,
       });
+      invalidateTagsCache();
     } catch (err) {
       console.error('Failed to send tag command:', err);
     }

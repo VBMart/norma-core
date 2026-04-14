@@ -78,6 +78,10 @@ function loadTags(): Promise<TagMarker[]> {
   return cachedTags;
 }
 
+export function invalidateTagsCache(): void {
+  cachedTags = null;
+}
+
 export function useInferenceTags(): TagMarker[] {
   const [tags, setTags] = useState<TagMarker[]>([]);
 
