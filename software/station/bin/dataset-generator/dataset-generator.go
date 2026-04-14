@@ -123,10 +123,13 @@ func main() {
 }
 
 func runProcessing(program *tea.Program, params internal.Params) error {
+	log.Info().Msgf("Connecting to station at %s...", params.Robot)
 	client, err := station.NewStationClient(params.Robot)
 	if err != nil {
+		log.Error().Err(err).Msg("Failed to connect to station")
 		return fmt.Errorf("failed to create station client: %w", err)
 	}
+	log.Info().Msg("Connected to station")
 
 	log.Info().Msgf("Fetching queue bounds for %s from inference-states [%v -> %v]", params.Queue, params.From, params.To)
 
