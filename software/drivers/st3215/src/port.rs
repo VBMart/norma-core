@@ -781,6 +781,14 @@ impl St3215Port {
             };
 
             for motor_id in 1..=max_motors_cnt {
+                // Send hardware reset without unlocking EEPROM
+                let reset_req = protocol::ST3215Request::Reset { motor: motor_id };
+                if let Err(e) = reset_req.async_readwrite(port, ST3215_COMMAND_TIMEOUT_MS).await {
+                    warn!("Failed to send reset to motor {}: {}", motor_id, e);
+                } else {
+                    info!("FreezeCalibration: Hardware reset completed for motor {}", motor_id);
+                }
+                
                 let provided_midpoint = midpoints.get(&motor_id).copied();
                 match Self::freeze_calibration(port, motor_id, meta, bus_info, provided_midpoint, max_motors_cnt).await {
                     Ok(verified) => { all_ok &= verified; }
