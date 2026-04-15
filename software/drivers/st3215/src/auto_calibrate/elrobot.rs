@@ -96,6 +96,11 @@ async fn run_elrobot_calibration(
 
     match result {
         Ok(_) => {
+            if let Err(e) = calibrator.save_calibration().await {
+                log::error!("Failed to save calibration: {}", e);
+                calibrator.mark_failed(&e.to_string());
+                return Err(e);
+            }
             calibrator.mark_done();
             info!("ElRobot calibration sequence complete");
             Ok(())

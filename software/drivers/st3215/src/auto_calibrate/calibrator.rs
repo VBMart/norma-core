@@ -3,7 +3,7 @@
 use crate::calibrate;
 use crate::presets::*;
 use crate::protocol::{RamRegister, EepromRegister};
-use crate::st3215_proto::{InferenceState, TxEnvelope};
+use crate::st3215_proto::{FreezeCalibrationCommand, FreezeMotorArc, InferenceState, TxEnvelope};
 use crate::state::ST3215BusCommunicator;
 use bytes::Bytes;
 use log::info;
@@ -93,6 +93,69 @@ impl ST3215Calibrator {
 
     pub fn is_stopped(&self) -> bool {
         self.stop_requested.load(Ordering::Relaxed)
+    }
+
+    pub async fn save_calibration(&mut self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        info!("Saving calibration for bus {}", self.target_bus_serial);
+
+        const FULL_RANGE: u32 = 4096;
+        const MAX_ANGLE_STEP: u32 = 4095;
+
+        let motor_ids = self.active_motors.clone();
+        let mut motor_arcs: Vec<FreezeMotorArc> = Vec::new();
+
+        for motor_id in motor_ids {
+            let positions = match self.motor_positions.get(&motor_id) {
+                Some(p) if !p.is_empty() => p,
+                _ => {
+                    log::warn!("Motor {}: No calibration data, skipping", motor_id);
+                    continue;
+                }
+            };
+
+            let arc = calibrate::calculate_arc(positions);
+            let arc_min = arc.min as u32;
+            let arc_max = arc.max as u32;
+
+            let midpoint = if arc_max >= arc_min {
+                let range_size = arc_max - arc_min;
+                arc_min + range_size / 2
+            } else {
+                let range_size = (FULL_RANGE - arc_min) + arc_max;
+                (arc_min + range_size / 2) & MAX_ANGLE_STEP
+            };
+
+            info!(
+                "Motor {}: Sending arc min={} max={} midpoint={}",
+                motor_id, arc_min, arc_max, midpoint
+            );
+
+            motor_arcs.push(FreezeMotorArc {
+                motor_id: motor_id as u32,
+                min_angle: arc_min,
+                max_angle: arc_max,
+                midpoint,
+            });
+        }
+
+        let arcs_count = motor_arcs.len();
+        let command_id = self.next_command_id();
+        let envelope = TxEnvelope {
+            monotonic_stamp_ns: systime::get_monotonic_stamp_ns(),
+            local_stamp_ns: systime::get_local_stamp_ns(),
+            app_start_id: systime::get_app_start_id(),
+            target_bus_serial: self.target_bus_serial.clone(),
+            command_id,
+            freeze_calibration: Some(FreezeCalibrationCommand {
+                freeze: true,
+                arcs: motor_arcs,
+            }),
+            ..Default::default()
+        };
+        self.comm.send_tx(&envelope)?;
+
+        info!("Calibration freeze command sent with {} motor arcs", arcs_count);
+        Ok(())
     }
 
     pub async fn disable_all_motors_torque(&mut self, motor_ids: &[u8]) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
