@@ -94,10 +94,10 @@ Ensure all USB cables are rated for **data transfer**. Power-only "charging" cab
 Simply download the pre-configured .3mf file and start printing:
 
 | Profile                                    | Link                                        | Print Time (Leader + Follower) |
-|--------------------------------------------|---------------------------------------------|---------------------------------|
-| **PLA Only (Recommended)**                 | [.3mf](print/basic/elrobot_full_basic.3mf)  | 28.5h                           |
-| AMS Single Nozzle (PLA + PETG supports)    | [.3mf](print/ams/elrobot_full_ams.3mf)      | 39h on A1/P2S                   |
-| AMS Dual Nozzle (PLA + PETG supports)      | [.3mf](print/ams/elrobot_full_ams_dual.3mf) | 30.5h on H2D                    |
+|--------------------------------------------|---------------------------------------------|--------------------------------|
+| **PLA Only (Recommended)**                 | [.3mf](print/basic/elrobot_full_basic.3mf)  | 29.5h                          |
+| AMS Single Nozzle (PLA + PETG supports)    | [.3mf](print/ams/elrobot_full_ams.3mf)      | 42.5h on A1/P2S                |
+| AMS Dual Nozzle (PLA + PETG supports)      | [.3mf](print/ams/elrobot_full_ams_dual.3mf) | 32h on H2D                     |
 
 **Before printing:**
 - **Camera mount:** The .3mf files include 3 different camera mounts. Choose the one that fits your camera and delete the others before slicing.
