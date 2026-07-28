@@ -36,6 +36,8 @@ enum QueueDataType {
     QDT_AIRGRADIENT_OPEN_AIR_O_1PST_RX = 53; // airgradient_open_air_o_1pst.RxEnvelope
 
     QDT_VICTRON_SMARTSOLAR_MPPT_RX = 54; // victron_smartsolar_mppt.RxEnvelope
+
+    QDT_DFROBOT_RS485_RX = 55; // dfrobot_rs485.RxEnvelope
 }
 
 enum StationCommandType {
