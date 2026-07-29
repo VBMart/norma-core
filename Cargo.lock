@@ -2569,6 +2569,7 @@ dependencies = [
  "clap",
  "dashmap",
  "dmesg",
+ "dfrobot-rs485",
  "env_logger",
  "fastwebsockets",
  "hikmicro-thermal",
