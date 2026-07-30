@@ -23,10 +23,10 @@ drivers:
     enabled: true   # autodetects boards by USB vid/pid 2341:0060; each streams ~100 Hz (~2.3 GB/day) into arduino-nicla-sense-me/<serial>/rx
   dfrobot-rs485:
     enabled: true
-    ports: ["/dev/cu.usbserial-*", "/dev/ttyUSB*"]
+    ports: ["/dev/cu.usbserial-*", "/dev/cu.wchusbserial*", "/dev/ttyUSB*"]
     baud: 9600
     poll-interval: 1s
-    # scan-ids: "1-10"   # default; models are auto-detected.
+    # scan-ids: "1-10"   # default; auto-detect scans these IDs ("A-B" string or list like [1, 2]; quote single IDs: "5"). Models are auto-detected.
     # sensors:           # optional explicit override, skips detection:
     #   - { model: uv, modbus-id: 3 }
 inference:
