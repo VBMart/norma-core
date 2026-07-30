@@ -913,6 +913,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // This MUST run on the main thread, so we use select! instead of spawn
     #[cfg(target_os = "macos")]
     {
+        let ctrl_c = tokio::signal::ctrl_c();
+        tokio::pin!(ctrl_c);
         let mut interval = tokio::time::interval(tokio::time::Duration::from_millis(100));
         loop {
             tokio::select! {
@@ -920,7 +922,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     // Runs on main thread - tick the run loop
                     usbvideo::process_main_run_loop();
                 }
-                _ = tokio::signal::ctrl_c() => {
+                _ = &mut ctrl_c => {
                     log::info!("\nShutting down...");
                     break;
                 }
