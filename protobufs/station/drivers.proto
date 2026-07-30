@@ -47,4 +47,5 @@ enum StationCommandType {
     STC_YAHBOOM_DOGZILLA_LITE_COMMAND = 3; // yahboom_dogzilla_lite.Command
     STC_VESC_TRAMPA_COMMAND           = 4; // vesc_trampa.Command
     STC_ARDUINO_NICLA_SENSE_ENV_COMMAND = 5; // arduino_nicla_sense_env.Command
+    STC_DFROBOT_RS485_COMMAND         = 6; // dfrobot_rs485.Command
 }
