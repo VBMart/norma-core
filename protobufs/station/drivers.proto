@@ -38,6 +38,8 @@ enum QueueDataType {
     QDT_VICTRON_SMARTSOLAR_MPPT_RX = 54; // victron_smartsolar_mppt.RxEnvelope
 
     QDT_DFROBOT_RS485_RX = 55; // dfrobot_rs485.RxEnvelope
+
+    QDT_ARDUINO_NICLA_SENSE_ME_RX = 56; // arduino_nicla_sense_me.RxEnvelope
 }
 
 enum StationCommandType {

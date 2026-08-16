@@ -53,6 +53,7 @@ function HistoryPage() {
   const mirroringCount = parsedFrame?.mirroring ? 1 : 0;
   const sysinfoCount = parsedFrame?.sysinfo ? 1 : 0;
   const arduinoNiclaSenseEnvCount = parsedFrame?.arduinoNiclaSenseEnv ? 1 : 0;
+  const arduinoNiclaSenseMeCount = parsedFrame?.arduinoNiclaSenseMe ? 1 : 0;
   const ina226Count = parsedFrame?.ina226?.length ?? 0;
   const dfrobotRs485Count = parsedFrame?.dfrobotRs485?.length ?? 0;
   const airgradientOpenAirCount = parsedFrame?.airgradientOpenAir?.length ?? 0;
@@ -68,7 +69,8 @@ function HistoryPage() {
   const mirroringIndex = hikmicroThermalIndex + hikmicroThermalCount;
   const sysinfoIndex = mirroringIndex + mirroringCount;
   const arduinoNiclaSenseEnvIndex = sysinfoIndex + sysinfoCount;
-  const ina226Index = arduinoNiclaSenseEnvIndex + arduinoNiclaSenseEnvCount;
+  const arduinoNiclaSenseMeIndex = arduinoNiclaSenseEnvIndex + arduinoNiclaSenseEnvCount;
+  const ina226Index = arduinoNiclaSenseMeIndex + arduinoNiclaSenseMeCount;
   const dfrobotRs485Index = ina226Index + ina226Count;
   const airgradientOpenAirIndex = dfrobotRs485Index + dfrobotRs485Count;
   const victronSmartSolarIndex = airgradientOpenAirIndex + airgradientOpenAirCount;
@@ -289,6 +291,17 @@ function HistoryPage() {
                             </div>
                           </div>
                         )}
+                        {parsedFrame.arduinoNiclaSenseMe && (
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <span className="text-accent-warning font-mono">{parsedFrame.arduinoNiclaSenseMe.queueId}</span>
+                              <span className="text-accent-info text-xs px-1 py-0.5 bg-accent-info/10 rounded">NICLA ME</span>
+                            </div>
+                            <div className="text-text-label font-mono">
+                              {formatPtrBytes(parsedFrame.arduinoNiclaSenseMe.ptr)}
+                            </div>
+                          </div>
+                        )}
                         {parsedFrame.ina226?.map((entry) => (
                           <div key={entry.queueId} className="flex items-center justify-between">
                             <div className="flex items-center gap-3">
@@ -496,6 +509,21 @@ function HistoryPage() {
                       index={arduinoNiclaSenseEnvIndex}
                       dataQueueType="arduino-nicla-sense-env"
                       dataQueueId={parsedFrame.arduinoNiclaSenseEnv.queueId}
+                    />
+                  )}
+                  {parsedFrame.arduinoNiclaSenseMe && (
+                    <HistoryElement
+                      element={{
+                        queueId: parsedFrame.arduinoNiclaSenseMe.queueId,
+                        entryId: parsedFrame.arduinoNiclaSenseMe.ptr,
+                        data: parsedFrame.arduinoNiclaSenseMe.data,
+                        rawData: parsedFrame.arduinoNiclaSenseMe.rawData ?? null,
+                        type: getQueueType(parsedFrame.arduinoNiclaSenseMe.queueType),
+                        queueType: parsedFrame.arduinoNiclaSenseMe.queueType,
+                      }}
+                      index={arduinoNiclaSenseMeIndex}
+                      dataQueueType="arduino-nicla-sense-me"
+                      dataQueueId={parsedFrame.arduinoNiclaSenseMe.queueId}
                     />
                   )}
                   {parsedFrame.ina226?.map((entry, idx) => (
