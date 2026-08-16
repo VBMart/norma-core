@@ -1,5 +1,5 @@
 import Long from 'long';
-import { airgradient_open_air_o_1pst, arduino_nicla_sense_env, hikmicro, ina226, yahboom_dogzilla_lite, drivers, inference, motors_mirroring, normvla, st3215, sysinfo, usbvideo, vesc_trampa, victron_smartsolar_mppt } from '@/api/proto.js';
+import { airgradient_open_air_o_1pst, arduino_nicla_sense_env, arduino_pro_4g_gnss, hikmicro, ina226, yahboom_dogzilla_lite, drivers, inference, motors_mirroring, normvla, st3215, sysinfo, usbvideo, vesc_trampa, victron_smartsolar_mppt } from '@/api/proto.js';
 import { NormFsClient } from "./normfs.js";
 import { getGlobalTimeAdjustmentNs, isTimeSyncActive } from '@/api/time-sync.js';
 import {
@@ -27,6 +27,7 @@ export interface Frame {
   mirroring?: FrameEntry<motors_mirroring.IRxEnvelope>;
   sysinfo?: FrameEntry<sysinfo.IEnvelope>;
   arduinoNiclaSenseEnv?: FrameEntry<arduino_nicla_sense_env.IRxEnvelope>;
+  arduinoPro4gGnss?: FrameEntry<arduino_pro_4g_gnss.IRxEnvelope>;
   ina226?: FrameEntry<ina226.IRxEnvelope>[];
   airgradientOpenAir?: FrameEntry<airgradient_open_air_o_1pst.IRxEnvelope>[];
   victronSmartSolar?: FrameEntry<victron_smartsolar_mppt.IRxEnvelope>[];
@@ -49,7 +50,7 @@ export interface Frame {
 }
 
 // Find entry in previous frame with matching queue and pointer
-type DecodedEntry = st3215.IInferenceState | st3215.ITxEnvelope | usbvideo.IRxEnvelope | hikmicro.IRxEnvelope | motors_mirroring.IRxEnvelope | sysinfo.IEnvelope | arduino_nicla_sense_env.IRxEnvelope | ina226.IRxEnvelope | airgradient_open_air_o_1pst.IRxEnvelope | victron_smartsolar_mppt.IRxEnvelope | yahboom_dogzilla_lite.IInferenceState | normvla.IFrame | vesc_trampa.IInferenceState | vesc_trampa.IRxEnvelope | vesc_trampa.ITxEnvelope | null;
+type DecodedEntry = st3215.IInferenceState | st3215.ITxEnvelope | usbvideo.IRxEnvelope | hikmicro.IRxEnvelope | motors_mirroring.IRxEnvelope | sysinfo.IEnvelope | arduino_nicla_sense_env.IRxEnvelope | arduino_pro_4g_gnss.IRxEnvelope | ina226.IRxEnvelope | airgradient_open_air_o_1pst.IRxEnvelope | victron_smartsolar_mppt.IRxEnvelope | yahboom_dogzilla_lite.IInferenceState | normvla.IFrame | vesc_trampa.IInferenceState | vesc_trampa.IRxEnvelope | vesc_trampa.ITxEnvelope | null;
 
 interface ParseFrameOptions {
   retainRawData?: boolean;
@@ -138,6 +139,14 @@ function findPreviousEntry(
     const prevPtr = previousFrame.arduinoNiclaSenseEnv.ptr;
     if (prevPtr.length === ptr.length && prevPtr.every((b, i) => b === ptr[i])) {
       return { decoded: previousFrame.arduinoNiclaSenseEnv.data, rawData: previousFrame.arduinoNiclaSenseEnv.rawData ?? null };
+    }
+  }
+
+  // Check Arduino Pro 4G GNSS
+  if (previousFrame.arduinoPro4gGnss?.queueId === queue) {
+    const prevPtr = previousFrame.arduinoPro4gGnss.ptr;
+    if (prevPtr.length === ptr.length && prevPtr.every((b, i) => b === ptr[i])) {
+      return { decoded: previousFrame.arduinoPro4gGnss.data, rawData: previousFrame.arduinoPro4gGnss.rawData ?? null };
     }
   }
 
@@ -324,6 +333,13 @@ export async function parseFrame(
                 console.error("Failed to decode arduino_nicla_sense_env.RxEnvelope:", error);
               }
               break;
+            case drivers.QueueDataType.QDT_ARDUINO_PRO_4G_GNSS_RX:
+              try {
+                decoded = arduino_pro_4g_gnss.RxEnvelope.decode(streamEntry.data);
+              } catch (error) {
+                console.error("Failed to decode arduino_pro_4g_gnss.RxEnvelope:", error);
+              }
+              break;
             case drivers.QueueDataType.QDT_INA226_RX:
               try {
                 decoded = ina226.RxEnvelope.decode(streamEntry.data);
@@ -473,6 +489,15 @@ export async function parseFrame(
               queueId: result.queue,
               ptr: result.ptr,
               data: result.decoded as arduino_nicla_sense_env.IRxEnvelope,
+              rawData: retainRawData ? result.rawData ?? null : null,
+              queueType: result.type
+            };
+            break;
+          case drivers.QueueDataType.QDT_ARDUINO_PRO_4G_GNSS_RX:
+            frame.arduinoPro4gGnss = {
+              queueId: result.queue,
+              ptr: result.ptr,
+              data: result.decoded as arduino_pro_4g_gnss.IRxEnvelope,
               rawData: retainRawData ? result.rawData ?? null : null,
               queueType: result.type
             };
