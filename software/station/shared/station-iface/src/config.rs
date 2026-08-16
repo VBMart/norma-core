@@ -105,6 +105,13 @@ pub struct Drivers {
         skip_serializing_if = "Option::is_none"
     )]
     pub victron_smartsolar_mppt: Option<VictronSmartSolarMpptConfig>,
+
+    #[serde(
+        rename = "dfrobot-rs485",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub dfrobot_rs485: Option<DfrobotRs485Config>,
 }
 
 /// ST3215 servo bus configuration
@@ -502,6 +509,50 @@ impl Default for VictronSmartSolarMpptConfig {
     }
 }
 
+/// DFRobot RS-485 Modbus-RTU sensors (SEN0640/0641/0642/0644) behind a
+/// USB-to-RS485 adapter. One queue per sensor; the driver is read-only.
+/// Poll interval and baud candidates are fixed (1s; [4800, 9600]) and all
+/// sensors are auto-detected — neither is configurable.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct DfrobotRs485Config {
+    #[serde(default)]
+    pub enabled: bool,
+
+    /// Candidate port paths, tried in order. '*' globs are supported.
+    #[serde(default = "default_dfrobot_rs485_ports")]
+    pub ports: Vec<String>,
+
+    /// Modbus IDs to scan for auto-detection, e.g. "1-10" (default) or [1, 2, 3].
+    #[serde(rename = "scan-ids", default, skip_serializing_if = "Option::is_none")]
+    pub scan_ids: Option<DfrobotScanIds>,
+}
+
+/// Modbus ID scan range for auto-detection: either a "A-B" string or an
+/// explicit list of IDs.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(untagged)]
+pub enum DfrobotScanIds {
+    List(Vec<u8>),
+    Range(String),
+}
+
+fn default_dfrobot_rs485_ports() -> Vec<String> {
+    vec![
+        "/dev/ttyUSB*".to_string(),
+        "/dev/cu.usbserial-*".to_string(),
+    ]
+}
+
+impl Default for DfrobotRs485Config {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            ports: default_dfrobot_rs485_ports(),
+            scan_ids: None,
+        }
+    }
+}
+
 fn default_ov5647_dimension() -> String {
     "320x240".to_string()
 }
@@ -539,6 +590,7 @@ impl Default for Drivers {
             ina226: None,
             airgradient_open_air_o_1pst: None,
             victron_smartsolar_mppt: None,
+            dfrobot_rs485: None,
         }
     }
 }
@@ -573,7 +625,7 @@ impl Config {
 
 #[cfg(test)]
 mod config_tests {
-    use super::Config;
+    use super::{Config, DfrobotScanIds};
 
     const MINIMAL_CONFIG: &str = "drivers:\n  system-info: true\n";
 
@@ -625,6 +677,58 @@ mod config_tests {
         assert!(victron.enabled);
         assert_eq!(victron.read_timeout, std::time::Duration::from_secs(30));
         assert_eq!(cfg.inference.as_ref().map(Vec::len), Some(0));
+    }
+
+    #[test]
+    fn parses_dfrobot_rs485_config() {
+        let cfg: Config = serde_yaml::from_str(
+            "drivers:\n  system-info: true\n  dfrobot-rs485:\n    enabled: true\n    ports: [\"/dev/ttyUSB*\", \"/dev/cu.usbserial-*\"]\n    scan-ids: \"1-10\"\ninference:\n",
+        )
+        .unwrap();
+        let dfrobot = cfg.drivers.dfrobot_rs485.unwrap();
+        assert!(dfrobot.enabled);
+        assert_eq!(dfrobot.ports, vec!["/dev/ttyUSB*", "/dev/cu.usbserial-*"]);
+        match dfrobot.scan_ids {
+            Some(DfrobotScanIds::Range(ref spec)) => assert_eq!(spec, "1-10"),
+            other => panic!("expected Range, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn dfrobot_rs485_config_defaults() {
+        let cfg: Config = serde_yaml::from_str(
+            "drivers:\n  system-info: true\n  dfrobot-rs485:\n    enabled: true\ninference:\n",
+        )
+        .unwrap();
+        let dfrobot = cfg.drivers.dfrobot_rs485.unwrap();
+        assert!(!dfrobot.ports.is_empty());
+        assert!(dfrobot.scan_ids.is_none());
+    }
+
+    #[test]
+    fn parses_dfrobot_rs485_scan_ids_string() {
+        let cfg: Config = serde_yaml::from_str(
+            "drivers:\n  system-info: true\n  dfrobot-rs485:\n    enabled: true\n    scan-ids: \"1-10\"\ninference:\n",
+        )
+        .unwrap();
+        let dfrobot = cfg.drivers.dfrobot_rs485.unwrap();
+        match dfrobot.scan_ids {
+            Some(DfrobotScanIds::Range(ref spec)) => assert_eq!(spec, "1-10"),
+            other => panic!("expected Range, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn parses_dfrobot_rs485_scan_ids_list() {
+        let cfg: Config = serde_yaml::from_str(
+            "drivers:\n  system-info: true\n  dfrobot-rs485:\n    enabled: true\n    scan-ids: [1, 2, 3, 4]\ninference:\n",
+        )
+        .unwrap();
+        let dfrobot = cfg.drivers.dfrobot_rs485.unwrap();
+        match dfrobot.scan_ids {
+            Some(DfrobotScanIds::List(ref ids)) => assert_eq!(ids, &vec![1, 2, 3, 4]),
+            other => panic!("expected List, got {:?}", other),
+        }
     }
 }
 
