@@ -40,6 +40,8 @@ enum QueueDataType {
     QDT_DFROBOT_RS485_RX = 55; // dfrobot_rs485.RxEnvelope
 
     QDT_ARDUINO_NICLA_SENSE_ME_RX = 56; // arduino_nicla_sense_me.RxEnvelope
+
+    QDT_ARDUINO_PRO_4G_GNSS_RX = 57; // arduino_pro_4g_gnss.RxEnvelope
 }
 
 enum StationCommandType {

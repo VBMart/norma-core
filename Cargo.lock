@@ -158,6 +158,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "arduino-pro-4g-gnss"
+version = "0.1.0-beta.10"
+dependencies = [
+ "bytes",
+ "log",
+ "normfs",
+ "prost",
+ "prost-build",
+ "station_iface",
+ "systime",
+ "tokio",
+ "tokio-serial",
+]
+
+[[package]]
 name = "atomic-waker"
 version = "1.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2537,6 +2552,7 @@ dependencies = [
  "anyhow",
  "arduino-nicla-sense-env",
  "arduino-nicla-sense-me",
+ "arduino-pro-4g-gnss",
  "bytes",
  "clap",
  "dashmap",

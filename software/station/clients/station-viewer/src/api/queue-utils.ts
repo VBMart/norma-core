@@ -47,6 +47,8 @@ export function getQueueType(queueType: drivers.QueueDataType): string | undefin
       return 'arduino-nicla-sense-env';
     case drivers.QueueDataType.QDT_ARDUINO_NICLA_SENSE_ME_RX:
       return 'arduino-nicla-sense-me';
+    case drivers.QueueDataType.QDT_ARDUINO_PRO_4G_GNSS_RX:
+      return 'arduino-pro-4g-gnss';
     case drivers.QueueDataType.QDT_INA226_RX:
       return 'ina226';
     case drivers.QueueDataType.QDT_DFROBOT_RS485_RX:
