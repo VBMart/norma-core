@@ -60,6 +60,7 @@ IMAGE_INSTALL = "\
     e2fsprogs \
     dosfstools \
     x8-sdcard-automount \
+    x8-gnss-modem-udev \
     \
     v4l-utils \
     alsa-utils \
