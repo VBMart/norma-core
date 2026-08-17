@@ -1,4 +1,4 @@
-import { airgradient_open_air_o_1pst, arduino_nicla_sense_env, arduino_nicla_sense_me, hikmicro, usbvideo, frame, st3215, motors_mirroring, sysinfo, yahboom_dogzilla_lite, normvla, ina226, victron_smartsolar_mppt, dfrobot_rs485 } from '@/api/proto.js';
+import { airgradient_open_air_o_1pst, arduino_nicla_sense_env, arduino_nicla_sense_me, arduino_pro_4g_gnss, hikmicro, usbvideo, frame, st3215, motors_mirroring, sysinfo, yahboom_dogzilla_lite, normvla, ina226, victron_smartsolar_mppt, dfrobot_rs485 } from '@/api/proto.js';
 import { serverToLocal } from '@/api/timestamp-utils';
 
 type ParsedHistoryData =
@@ -265,6 +265,18 @@ export function parseArduinoNiclaSenseMeData(data: Uint8Array | ParsedHistoryDat
     return arduino_nicla_sense_me.RxEnvelope.decode(data);
   } catch (error) {
     console.error('Failed to parse arduino_nicla_sense_me.RxEnvelope:', error);
+    return null;
+  }
+}
+
+export function parseArduinoPro4gGnssData(data: Uint8Array | ParsedHistoryData): arduino_pro_4g_gnss.RxEnvelope | null {
+  if (!(data instanceof Uint8Array)) {
+    return data as arduino_pro_4g_gnss.RxEnvelope;
+  }
+  try {
+    return arduino_pro_4g_gnss.RxEnvelope.decode(data);
+  } catch (error) {
+    console.error('Failed to parse arduino_pro_4g_gnss.RxEnvelope:', error);
     return null;
   }
 }

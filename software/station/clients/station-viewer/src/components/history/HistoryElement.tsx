@@ -1,12 +1,13 @@
 import { useState } from 'react';
-import { airgradient_open_air_o_1pst, arduino_nicla_sense_env, arduino_nicla_sense_me, hikmicro, ina226, usbvideo, st3215, motors_mirroring, sysinfo, yahboom_dogzilla_lite, normvla, vesc_trampa, victron_smartsolar_mppt, dfrobot_rs485 } from '@/api/proto.js';
-import { formatBytes, parseUsbVideoData, parseHikmicroThermalData, parseMirroringData, parseSysinfoData, parseArduinoNiclaSenseEnvData, parseArduinoNiclaSenseMeData, parseIna226Data, parseAirGradientData, parseVictronSmartSolarData, parseYahboomDogzillaLiteData, parseNormvlaData, parseDfrobotRs485Data } from '@/components/history/history-utils';
+import { airgradient_open_air_o_1pst, arduino_nicla_sense_env, arduino_nicla_sense_me, arduino_pro_4g_gnss, hikmicro, ina226, usbvideo, st3215, motors_mirroring, sysinfo, yahboom_dogzilla_lite, normvla, vesc_trampa, victron_smartsolar_mppt, dfrobot_rs485 } from '@/api/proto.js';
+import { formatBytes, parseUsbVideoData, parseHikmicroThermalData, parseMirroringData, parseSysinfoData, parseArduinoNiclaSenseEnvData, parseArduinoNiclaSenseMeData, parseArduinoPro4gGnssData, parseIna226Data, parseAirGradientData, parseVictronSmartSolarData, parseYahboomDogzillaLiteData, parseNormvlaData, parseDfrobotRs485Data } from '@/components/history/history-utils';
 import ExpandedView from '@/components/history/ExpandedView';
 import { readArduinoNiclaSenseEnvMainValues } from '@/devices/arduino-nicla-sense-env/values';
 import { cardinalName, readArduinoNiclaSenseMeMainValues, vecMagnitude } from '@/devices/arduino-nicla-sense-me/values';
 import { formatIna226Current, readIna226CurrentAmps, readIna226ShuntMillivolts } from '@/devices/ina226/values';
 import { airGradientDeviceLabel, readAirGradientValues } from '@/devices/airgradient-open-air-o-1pst/values';
 import { dfrobotModelLabel, dfrobotPrimaryText } from '@/devices/dfrobot-rs485/values';
+import { decodeBatchText, gnssDeviceLabel, parseNmeaBatch } from '@/devices/arduino-pro-4g-gnss/values';
 import { formatCelsius, latestThermalFrame, renderThermalFrame } from '@/devices/hikmicro-thermal/thermal';
 import {
   describeRegisterValue,
@@ -60,7 +61,7 @@ function formatSensorValue(value: number | null, unit = '', decimals = 2): strin
 }
 
 function HistoryElement({ element, index, dataQueueType, dataQueueId }: HistoryElementProps) {
-  const [isExpanded, setIsExpanded] = useState(element.type === 'usbvideo' || element.type === 'hikmicro-thermal' || element.type === 'st3215' || element.type === 'yahboom_dogzilla_lite' || element.type === 'arduino-nicla-sense-env' || element.type === 'arduino-nicla-sense-me' || element.type === 'ina226' || element.type === 'airgradient-open-air-o-1pst' || element.type === 'victron-smartsolar-mppt' || element.type === 'normvla' || element.type === 'st3215tx' || element.type === 'vesc-trampa' || element.type === 'vesc-trampa-rx' || element.type === 'vesc-trampa-tx');
+  const [isExpanded, setIsExpanded] = useState(element.type === 'usbvideo' || element.type === 'hikmicro-thermal' || element.type === 'st3215' || element.type === 'yahboom_dogzilla_lite' || element.type === 'arduino-nicla-sense-env' || element.type === 'arduino-nicla-sense-me' || element.type === 'arduino-pro-4g-gnss' || element.type === 'ina226' || element.type === 'airgradient-open-air-o-1pst' || element.type === 'victron-smartsolar-mppt' || element.type === 'normvla' || element.type === 'st3215tx' || element.type === 'vesc-trampa' || element.type === 'vesc-trampa-rx' || element.type === 'vesc-trampa-tx');
   const displayQueueId = formatQueueIdForDisplay(element.queueId);
 
   const usbVideoData = element.type === 'usbvideo' && element.data ? parseUsbVideoData(element.data) : null;
@@ -86,6 +87,8 @@ function HistoryElement({ element, index, dataQueueType, dataQueueId }: HistoryE
   const arduinoNiclaSenseMeHeading = arduinoNiclaSenseMeValues.headingDeg !== null && Number.isFinite(arduinoNiclaSenseMeValues.headingDeg)
     ? `${arduinoNiclaSenseMeValues.headingDeg.toFixed(0)}° ${cardinalName(arduinoNiclaSenseMeValues.headingDeg)}`
     : null;
+  const gnssData = element.type === 'arduino-pro-4g-gnss' && element.data ? parseArduinoPro4gGnssData(element.data) : null;
+  const gnssValues = gnssData ? parseNmeaBatch(decodeBatchText(gnssData.data)) : null;
   const ina226Data = element.type === 'ina226' && element.data ? parseIna226Data(element.data) : null;
   const ina226ShuntVoltage = formatSensorValue(readIna226ShuntMillivolts(ina226Data?.data), 'mV', 4);
   const ina226CurrentValue = readIna226CurrentAmps(ina226Data?.data, ina226Data?.device?.info?.shuntResistanceOhms);
@@ -302,6 +305,35 @@ function HistoryElement({ element, index, dataQueueType, dataQueueId }: HistoryE
               )}
               {arduinoNiclaSenseMeHeading && (
                 <span className="text-accent-secondary">Heading: {arduinoNiclaSenseMeHeading}</span>
+              )}
+            </div>
+          )}
+
+          {gnssData && (
+            <div className="flex items-center gap-3 text-xs">
+              <span className="text-accent-success">
+                {arduino_pro_4g_gnss.ArduinoPro4gGnssSignalType[gnssData.signalType]
+                  ?.replace(/^ARDUINO_PRO_4G_GNSS_/, '')
+                  .replace(/_/g, ' ') ?? gnssData.signalType}
+              </span>
+              {gnssData.device && (
+                <span className="text-accent-info">{gnssDeviceLabel(gnssData.device)}</span>
+              )}
+              {gnssValues && gnssValues.latitudeDeg !== null && gnssValues.longitudeDeg !== null && (
+                <span className="text-accent-data">
+                  {gnssValues.latitudeDeg.toFixed(6)}, {gnssValues.longitudeDeg.toFixed(6)}
+                </span>
+              )}
+              {gnssValues && gnssValues.fixQuality !== null && (
+                <span className={gnssValues.fixQuality > 0 ? 'text-accent-success' : 'text-accent-warning'}>
+                  {gnssValues.fixQuality > 0 ? 'FIX' : 'NO FIX'}
+                </span>
+              )}
+              {gnssValues && gnssValues.satellitesUsed !== null && (
+                <span className="text-accent-secondary">sats: {gnssValues.satellitesUsed}</span>
+              )}
+              {gnssData.xtraValidityMinutes > 0 && (
+                <span className="text-accent-data">XTRA {gnssData.xtraValidityMinutes} min</span>
               )}
             </div>
           )}
