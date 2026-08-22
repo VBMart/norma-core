@@ -23,6 +23,10 @@ export interface Frame {
   vescTrampaRx?: FrameEntry<vesc_trampa.IRxEnvelope>;
   vescTrampaTx?: FrameEntry<vesc_trampa.ITxEnvelope>;
   videoQueues?: FrameEntry<usbvideo.IRxEnvelope>[];
+  /** Every video queue in the inference state with its latest entry
+   * pointer — populated even when frame payloads are not fetched (video
+   * paused), so camera presence/liveness stays visible for free. */
+  videoQueuePointers?: { queueId: string; ptr: Uint8Array }[];
   hikmicroThermal?: FrameEntry<hikmicro.IRxEnvelope>[];
   mirroring?: FrameEntry<motors_mirroring.IRxEnvelope>;
   sysinfo?: FrameEntry<sysinfo.IEnvelope>;
@@ -57,6 +61,9 @@ type DecodedEntry = st3215.IInferenceState | st3215.ITxEnvelope | usbvideo.IRxEn
 interface ParseFrameOptions {
   retainRawData?: boolean;
   shouldPublishVideoFrames?: () => boolean;
+  /** Return false to skip fetching camera frame payloads altogether —
+   * their queues then appear only in videoQueuePointers. Default true. */
+  shouldFetchVideoFrames?: () => boolean;
 }
 
 function findPreviousEntry(
@@ -248,9 +255,11 @@ export async function parseFrame(
   options: ParseFrameOptions = {},
 ): Promise<Frame> {
   const retainRawData = options.retainRawData ?? true;
+  const fetchVideoFrames = options.shouldFetchVideoFrames?.() ?? true;
   const frame: Frame = {
     stateId: new Uint8Array(Array.from(entryIdBytes)),
     videoQueues: [],
+    videoQueuePointers: [],
     hikmicroThermal: [],
     ina226: [],
     dfrobotRs485: [],
@@ -286,6 +295,15 @@ export async function parseFrame(
       if (!entry.queue || !entry.ptr) {
         console.warn("Entry missing queue or ptr:", entry);
         return Promise.resolve(null);
+      }
+
+      if (entry.type === drivers.QueueDataType.QDT_USB_VIDEO_FRAMES) {
+        frame.videoQueuePointers!.push({ queueId: entry.queue, ptr: entry.ptr });
+        if (!fetchVideoFrames) {
+          // Video paused: the JPEG payload (hundreds of KB per camera per
+          // frame) is never requested, only the pointer above is kept.
+          return Promise.resolve(null);
+        }
       }
 
       // Check if we can reuse from previous frame
