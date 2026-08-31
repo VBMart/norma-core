@@ -46,8 +46,6 @@ message RxEnvelope {
     // Full raw register image, always starting at register 0x00.
     bytes data = 20;
 
-    // Field 21 was `bytes motion` (on-board motion batching), removed
-    // before the first release in favor of high-rate snapshot polling.
     reserved 21;
 
     string error = 50;

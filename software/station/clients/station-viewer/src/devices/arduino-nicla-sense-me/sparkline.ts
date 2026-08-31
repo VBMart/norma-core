@@ -141,8 +141,9 @@ export function buildAxisPolylines(
 }
 
 /**
- * Decimated variant of `buildAxisPolylines` for high-rate data (e.g. 100Hz
- * motion batches) that would otherwise produce far more points than pixels.
+ * Decimated variant of `buildAxisPolylines` for high-rate data (e.g. the
+ * ~100 Hz USB snapshot stream) that would otherwise produce far more
+ * points than pixels.
  * Samples are split into `buckets` contiguous groups; each bucket
  * contributes two points per axis — its min then its max — at
  * `x = b*step` and `x = b*step + step/2` where `step = width / buckets`.

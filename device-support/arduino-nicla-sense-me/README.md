@@ -58,13 +58,9 @@ Send the single byte `0x01`; the reply is one 172-byte frame: magic `0xA5 0x5A`,
 length byte `0xA8`, the 168-byte register image (latched, internally consistent), 
 and a trailing CRC8 (poly 0x07, init 0x00) over the 168-byte payload.
 
-### Removed: motion batching (0x02)
-
-Earlier firmware buffered motion samples and served them via command
-`0x02`. This was removed in favor of the station polling `0x01` at high
-rate (~100 Hz over USB): the loop paces itself on an absolute 10 ms
-schedule, answers one command per tick, and always serves the freshest
-snapshot. Unknown command bytes (including `0x02`) are ignored.
+The station polls `0x01` at high rate (~100 Hz over USB): the loop paces
+itself on an absolute 10 ms schedule, answers one command per tick, and
+always serves the freshest snapshot. Unknown command bytes are ignored.
 
 
 ## Flashing
