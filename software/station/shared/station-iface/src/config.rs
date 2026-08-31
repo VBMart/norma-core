@@ -492,6 +492,12 @@ pub struct ArduinoNiclaSenseMeBoardConfig {
     #[serde(rename = "i2c-bus", default, skip_serializing_if = "Option::is_none")]
     pub i2c_bus: Option<u32>,
 
+    /// Serial port path for bus-type usb (e.g. "/dev/ttyACM0"). Optional:
+    /// when omitted the driver autodetects by USB vid/pid. Each additional
+    /// USB board needs a distinct pinned port.
+    #[serde(rename = "usb-port", default, skip_serializing_if = "Option::is_none")]
+    pub usb_port: Option<String>,
+
     /// Per-board override of the driver-wide poll interval (e.g. "10ms"
     /// for ~100 Hz polling of a USB board).
     #[serde(
@@ -874,6 +880,7 @@ arduino-nicla-sense-me:
   boards:
     - id: nicla-usb
       bus-type: usb
+      usb-port: /dev/ttyACM7
       poll-interval: 10ms
     - bus-type: i2c
       i2c-bus: 3
@@ -883,6 +890,8 @@ arduino-nicla-sense-me:
         assert_eq!(me.boards.len(), 2);
         assert_eq!(me.boards[0].bus_type, ArduinoNiclaSenseMeBusType::Usb);
         assert_eq!(me.boards[0].i2c_bus, None);
+        assert_eq!(me.boards[0].usb_port.as_deref(), Some("/dev/ttyACM7"));
+        assert_eq!(me.boards[1].usb_port, None);
         assert_eq!(
             me.boards[0].poll_interval,
             Some(std::time::Duration::from_millis(10))

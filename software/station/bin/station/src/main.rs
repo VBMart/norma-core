@@ -414,7 +414,9 @@ impl Station {
                         ArduinoNiclaSenseMeBusType::Usb => {
                             Some(arduino_nicla_sense_me::ArduinoNiclaSenseMeBoardConfig {
                                 id: board.id.clone(),
-                                transport: arduino_nicla_sense_me::ArduinoNiclaSenseMeTransport::Usb,
+                                transport: arduino_nicla_sense_me::ArduinoNiclaSenseMeTransport::Usb {
+                                    usb_port: board.usb_port.clone(),
+                                },
                                 poll_interval: board.poll_interval,
                             })
                         }

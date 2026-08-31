@@ -20,6 +20,5 @@ async fn main() -> Result<(), String> {
     println!("pressure:       {:.1} hPa", f32_at(0x78));
     println!("heading:        {:.1} deg", f32_at(0x64));
 
-
     Ok(())
 }

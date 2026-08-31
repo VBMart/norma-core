@@ -13793,9 +13793,6 @@ export namespace arduino_nicla_sense_me {
         /** RxEnvelope data */
         data?: (Uint8Array|null);
 
-        /** RxEnvelope motion */
-        motion?: (Uint8Array|null);
-
         /** RxEnvelope error */
         error?: (string|null);
     }
@@ -13826,9 +13823,6 @@ export namespace arduino_nicla_sense_me {
 
         /** RxEnvelope data. */
         public data: Uint8Array;
-
-        /** RxEnvelope motion. */
-        public motion: Uint8Array;
 
         /** RxEnvelope error. */
         public error: string;
