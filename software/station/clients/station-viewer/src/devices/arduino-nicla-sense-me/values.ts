@@ -78,8 +78,18 @@ function hasRange(bytes: Uint8Array, offset: number, length: number): boolean {
   return offset >= 0 && length >= 0 && offset + length <= bytes.length;
 }
 
+// One DataView per buffer instead of one per field read: a full decode does
+// ~20 reads and runs at render rate (~100 Hz over USB), so per-read
+// allocations are measurable GC churn.
+const viewCache = new WeakMap<Uint8Array, DataView>();
+
 function viewFor(bytes: Uint8Array): DataView {
-  return new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  let view = viewCache.get(bytes);
+  if (!view) {
+    view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    viewCache.set(bytes, view);
+  }
+  return view;
 }
 
 export function f32le(bytes: Uint8Array, offset: number): number | null {
@@ -118,7 +128,12 @@ export function cardinalName(headingDeg: number): string {
   return CARDINALS[Math.round(normalized / 45) % 8];
 }
 
-function readQuat(bytes: Uint8Array): ArduinoNiclaSenseMeQuat | null {
+/**
+ * Rotation-vector quaternion, or null when the registers are unpopulated
+ * (zeros before the first BHY2 sample / on a failed subscription) or the
+ * buffer is short. Gate any orientation-derived display on this.
+ */
+export function readQuat(bytes: Uint8Array): ArduinoNiclaSenseMeQuat | null {
   const w = f32le(bytes, ME_OFFSETS.quat);
   const x = f32le(bytes, ME_OFFSETS.quat + 4);
   const y = f32le(bytes, ME_OFFSETS.quat + 8);
@@ -138,14 +153,17 @@ export function readArduinoNiclaSenseMeMainValues(
   data: Uint8Array | null | undefined,
 ): ArduinoNiclaSenseMeMainValues {
   const bytes = data instanceof Uint8Array ? data : new Uint8Array();
+  // Euler is firmware-derived from the rotation vector; without a valid
+  // quaternion the euler registers hold zeros, not measurements.
+  const quat = readQuat(bytes);
   return {
     accelG: vec3(bytes, ME_OFFSETS.accel),
     gyroDps: vec3(bytes, ME_OFFSETS.gyro),
     magUt: vec3(bytes, ME_OFFSETS.mag),
-    quat: readQuat(bytes),
-    headingDeg: f32le(bytes, ME_OFFSETS.euler),
-    pitchDeg: f32le(bytes, ME_OFFSETS.euler + 4),
-    rollDeg: f32le(bytes, ME_OFFSETS.euler + 8),
+    quat,
+    headingDeg: quat ? f32le(bytes, ME_OFFSETS.euler) : null,
+    pitchDeg: quat ? f32le(bytes, ME_OFFSETS.euler + 4) : null,
+    rollDeg: quat ? f32le(bytes, ME_OFFSETS.euler + 8) : null,
     temperatureC: f32le(bytes, ME_OFFSETS.temperature),
     humidityPercent: f32le(bytes, ME_OFFSETS.humidity),
     pressureHpa: f32le(bytes, ME_OFFSETS.pressure),

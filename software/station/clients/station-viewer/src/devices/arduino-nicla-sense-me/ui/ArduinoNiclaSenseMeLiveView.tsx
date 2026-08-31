@@ -1,10 +1,11 @@
-import type { arduino_nicla_sense_me } from '@/api/proto.js';
+import { useMemo } from 'react';
+import { arduino_nicla_sense_me } from '@/api/proto.js';
 import DeviceMetricPill from '@/components/DeviceMetricPill';
 import DeviceWidgetShell from '@/components/DeviceWidgetShell';
 import NiclaBoardScene from './NiclaBoardScene';
 import { buildDecimatedAxisPolylines, historyFor } from '../sparkline';
+import type { AxisPolylines } from '../sparkline';
 import { cardinalName, readArduinoNiclaSenseMeMainValues, vecMagnitude } from '../values';
-import type { Vec3 } from '../values';
 
 const AXIS_COLORS = {
   x: 'var(--color-accent-info)',
@@ -71,15 +72,12 @@ function CompassDial({ headingDeg }: { headingDeg: number | null }) {
 function AxisSparkline({
   label,
   magnitude,
-  samples,
-  minSpan,
+  lines,
 }: {
   label: string;
   magnitude: string;
-  samples: readonly Vec3[];
-  minSpan: number;
+  lines: AxisPolylines;
 }) {
-  const lines = buildDecimatedAxisPolylines(samples, 220, 30, minSpan, 110);
   return (
     <div className="min-w-0">
       {/* Labels arrive pre-uppercased (units keep their case): CSS
@@ -119,18 +117,37 @@ function ArduinoNiclaSenseMeLiveView({ data }: ArduinoNiclaSenseMeLiveViewProps)
   const magMagnitude = vecMagnitude(values.magUt);
   const heading = values.headingDeg;
 
-  // Rolling graph history: pushes are deduped by the envelope stamp, so
-  // running this during render (incl. StrictMode double-renders) is safe.
+  // Rolling graph history: only REGISTERS_SNAPSHOT envelopes carry a fresh
+  // sample — connected/disconnected/error envelopes re-send the last good
+  // image under a new stamp and would append stale or duplicate points.
+  // Pushes are further deduped by the envelope stamp, so running this
+  // during render (incl. StrictMode double-renders) is safe.
+  const isSnapshot =
+    data.signalType ===
+    arduino_nicla_sense_me.ArduinoNiclaSenseMeSignalType.ARDUINO_NICLA_SENSE_ME_REGISTERS_SNAPSHOT;
   const historyKey = data.device?.id || 'arduino-nicla-sense-me';
   const sampleKey = `${data.monotonicStampNs ?? ''}`;
   const accelHistory = historyFor(`${historyKey}/accel`, 600);
   const gyroHistory = historyFor(`${historyKey}/gyro`, 600);
   const magHistory = historyFor(`${historyKey}/mag`, 600);
-  if (sampleKey !== '') {
+  if (isSnapshot && sampleKey !== '') {
     accelHistory.push(sampleKey, values.accelG);
     gyroHistory.push(sampleKey, values.gyroDps);
     magHistory.push(sampleKey, values.magUt);
   }
+
+  // The histories are module-level stores mutated in place: sampleKey
+  // advances exactly when they can gain a sample, historyKey switches
+  // stores, so these two keys cover every change the polylines depend on.
+  const sparklines = useMemo(
+    () => ({
+      accel: buildDecimatedAxisPolylines(accelHistory.get(), 220, 30, 2, 110),
+      gyro: buildDecimatedAxisPolylines(gyroHistory.get(), 220, 30, 20, 110),
+      mag: buildDecimatedAxisPolylines(magHistory.get(), 220, 30, 100, 110),
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [historyKey, sampleKey],
+  );
 
   return (
     <DeviceWidgetShell title={deviceLabel(data)} subtitle="Arduino Sense ME" error={data.error}>
@@ -182,20 +199,17 @@ function ArduinoNiclaSenseMeLiveView({ data }: ArduinoNiclaSenseMeLiveViewProps)
         <AxisSparkline
           label="ACCEL (g)"
           magnitude={`|a| ${formatMeasured(accelMagnitude, 'g', 2)}`}
-          samples={accelHistory.get()}
-          minSpan={2}
+          lines={sparklines.accel}
         />
         <AxisSparkline
           label="GYRO (dps)"
           magnitude={`|ω| ${formatMeasured(gyroMagnitude, 'dps', 0)}`}
-          samples={gyroHistory.get()}
-          minSpan={20}
+          lines={sparklines.gyro}
         />
         <AxisSparkline
           label="MAG (µT)"
           magnitude={`|B| ${formatMeasured(magMagnitude, 'µT', 0)}`}
-          samples={magHistory.get()}
-          minSpan={100}
+          lines={sparklines.mag}
         />
       </div>
 

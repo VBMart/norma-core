@@ -234,7 +234,11 @@ function NiclaBoardScene({ quat }: NiclaBoardSceneProps) {
       state.board.setRotationFromQuaternion(rotation);
     }
     state.renderer.render(state.scene, state.camera);
-  }, [quat]);
+    // Depend on the quaternion's components, not the object: the parent
+    // builds a fresh quat object every render, which would re-run this
+    // (and a full WebGL render) even for an unchanged orientation.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [quat?.w, quat?.x, quat?.y, quat?.z]);
 
   return <div ref={containerRef} style={{ width: CANVAS_SIZE_PX, height: CANVAS_SIZE_PX }} className="mx-auto" />;
 }
