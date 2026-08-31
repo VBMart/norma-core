@@ -26,6 +26,7 @@ async fn main() -> Result<(), String> {
 
     println!("quat:            w={qw:+.3} x={qx:+.3} y={qy:+.3} z={qz:+.3}  |q|={:.3}",
         (qw * qw + qx * qx + qy * qy + qz * qz).sqrt());
+    println!("quat accuracy:   {:.3} rad (BHY2 heading-accuracy estimate)", f(0x60));
     println!("firmware euler:  heading={heading:+.1}  pitch={pitch:+.1}  roll={roll:+.1}");
     println!("accel raw g:     x={ax:+.3} y={ay:+.3} z={az:+.3}");
     println!("gravity-implied: pitch={gt_pitch:+.1}  roll={gt_roll:+.1}   (aircraft, z-down)");
