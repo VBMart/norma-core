@@ -18,7 +18,7 @@
 
 constexpr uint8_t I2C_ADDRESS = 0x22;
 constexpr size_t REG_MAP_SIZE = 0xA8;
-constexpr uint8_t SOFTWARE_REVISION = 1;
+constexpr uint8_t SOFTWARE_REVISION = 2;
 constexpr uint8_t PRODUCT_ID = 0x4D; // 'M'
 
 // Register offsets (must match the station driver + viewer).
@@ -276,26 +276,38 @@ void loop() {
 
   // Derived values (see the 11-subscription note): euler from the
   // quaternion, gravity as the quaternion-rotated 1g vector, linear
-  // acceleration as measured acceleration minus gravity.
-  float heading, pitch, roll;
-  // The BHY2 rotation vector uses the Android/ENU body convention (z up);
-  // quatToEuler's aircraft formulas expect z down, which made a flat board
-  // read roll ~180°. Feeding q' = q ⊗ rot180x — i.e. (w,x,y,z) →
-  // (-x, w, z, -y) — reconciles the frames: flat board = pitch 0, roll 0,
-  // heading unchanged (hardware-verified 2026-08-16).
-  quatToEuler(-qx, qw, qz, -qy, heading, pitch, roll);
+  // acceleration as measured acceleration minus gravity. All three are
+  // meaningless until the first rotation-vector sample lands (or if the RV
+  // subscription ever fails): the quaternion then reads zero, so the
+  // derived registers are zeroed and status bit2 stays clear instead of
+  // serving accel-as-linear-accel garbage that looks plausible.
+  float heading = 0.0f, pitch = 0.0f, roll = 0.0f;
+  float gx = 0.0f, gy = 0.0f, gz = 0.0f;
+  float lx = 0.0f, ly = 0.0f, lz = 0.0f;
+  const float qnorm = sqrtf(qw * qw + qx * qx + qy * qy + qz * qz);
+  const bool quatValid = qnorm > 0.5f; // a real rotation vector is ~unit
+  if (quatValid) {
+    const float nw = qw / qnorm, nx = qx / qnorm, ny = qy / qnorm, nz = qz / qnorm;
+    // The BHY2 rotation vector uses the Android/ENU body convention (z up);
+    // quatToEuler's aircraft formulas expect z down, which made a flat board
+    // read roll ~180°. Feeding q' = q ⊗ rot180x — i.e. (w,x,y,z) →
+    // (-x, w, z, -y) — reconciles the frames: flat board = pitch 0, roll 0,
+    // heading unchanged (hardware-verified 2026-08-16).
+    quatToEuler(-nx, nw, nz, -ny, heading, pitch, roll);
+    gravityFromQuat(nw, nx, ny, nz, gx, gy, gz);
+    lx = accel.x() / ACCEL_LSB_PER_G - gx;
+    ly = accel.y() / ACCEL_LSB_PER_G - gy;
+    lz = accel.z() / ACCEL_LSB_PER_G - gz;
+  }
   writeF32(liveMap, REG_EULER, heading);
   writeF32(liveMap, REG_EULER + 4, pitch);
   writeF32(liveMap, REG_EULER + 8, roll);
-
-  float gx, gy, gz;
-  gravityFromQuat(qw, qx, qy, qz, gx, gy, gz);
   writeF32(liveMap, REG_GRAVITY, gx);
   writeF32(liveMap, REG_GRAVITY + 4, gy);
   writeF32(liveMap, REG_GRAVITY + 8, gz);
-  writeF32(liveMap, REG_LACC, accel.x() / ACCEL_LSB_PER_G - gx);
-  writeF32(liveMap, REG_LACC + 4, accel.y() / ACCEL_LSB_PER_G - gy);
-  writeF32(liveMap, REG_LACC + 8, accel.z() / ACCEL_LSB_PER_G - gz);
+  writeF32(liveMap, REG_LACC, lx);
+  writeF32(liveMap, REG_LACC + 4, ly);
+  writeF32(liveMap, REG_LACC + 8, lz);
 
   writeF32(liveMap, REG_TEMPERATURE, temperature.value());
   writeF32(liveMap, REG_HUMIDITY, humidity.value());
@@ -313,7 +325,8 @@ void loop() {
   writeU32(liveMap, REG_STEP_COUNT, (uint32_t)stepCounter.value());
   writeU32(liveMap, REG_ACTIVITY, (uint32_t)activity.value());
 
-  liveMap[REG_STATUS] = (bhy2Ok ? 0x01 : 0x00) | (bsec.accuracy() > 0 ? 0x02 : 0x00);
+  liveMap[REG_STATUS] = (bhy2Ok ? 0x01 : 0x00) | (bsec.accuracy() > 0 ? 0x02 : 0x00) |
+                        (quatValid ? 0x04 : 0x00);
   if (bhy2Ok) {
     liveMap[REG_SAMPLE_COUNTER] = liveMap[REG_SAMPLE_COUNTER] + 1;
   }

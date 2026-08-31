@@ -16,7 +16,7 @@ is running.
 
 | Offset | Size | Field |
 |---|---|---|
-| 0x00 | u8 | status (bit0 BHY2 ok, bit1 BSEC valid) |
+| 0x00 | u8 | status (bit0 BHY2 ok, bit1 BSEC valid, bit2 rotation vector valid — euler/gravity/linear-accel are zeroed while clear) |
 | 0x01 | u8 | sample counter (increments per firmware refresh while BHY2 is running) |
 | 0x02–0x0B | — | reserved (zero) |
 | 0x0C | u8 | software revision |
@@ -47,7 +47,10 @@ is running.
 
 ## USB serial transport
 
-The sketch serves two command protocols over the board's USB CDC serial port (any baud):
+The sketch serves a command protocol over the board's USB CDC serial port at
+921600 baud. The Nicla's USB port is a SAMD11 serial-to-USB bridge, so the
+baud is a real UART rate: it directly limits throughput and must match the
+station driver's `SERIAL_BAUD`.
 
 ### Command 0x01: Register dump
 
