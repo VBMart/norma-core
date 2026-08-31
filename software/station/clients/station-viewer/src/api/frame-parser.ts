@@ -30,7 +30,7 @@ export interface Frame {
   mirroring?: FrameEntry<motors_mirroring.IRxEnvelope>;
   sysinfo?: FrameEntry<sysinfo.IEnvelope>;
   arduinoNiclaSenseEnv?: FrameEntry<arduino_nicla_sense_env.IRxEnvelope>;
-  arduinoNiclaSenseMe?: FrameEntry<arduino_nicla_sense_me.IRxEnvelope>;
+  arduinoNiclaSenseMe?: FrameEntry<arduino_nicla_sense_me.IRxEnvelope>[];
   ina226?: FrameEntry<ina226.IRxEnvelope>[];
   airgradientOpenAir?: FrameEntry<airgradient_open_air_o_1pst.IRxEnvelope>[];
   victronSmartSolar?: FrameEntry<victron_smartsolar_mppt.IRxEnvelope>[];
@@ -175,10 +175,13 @@ function findPreviousEntry(
   }
 
   // Check Arduino Nicla Sense ME
-  if (previousFrame.arduinoNiclaSenseMe?.queueId === queue) {
-    const prevPtr = previousFrame.arduinoNiclaSenseMe.ptr;
-    if (prevPtr.length === ptr.length && prevPtr.every((b, i) => b === ptr[i])) {
-      return { decoded: previousFrame.arduinoNiclaSenseMe.data, rawData: previousFrame.arduinoNiclaSenseMe.rawData ?? null };
+  if (previousFrame.arduinoNiclaSenseMe) {
+    const match = previousFrame.arduinoNiclaSenseMe.find(entry => entry.queueId === queue);
+    if (match) {
+      const prevPtr = match.ptr;
+      if (prevPtr.length === ptr.length && prevPtr.every((b, i) => b === ptr[i])) {
+        return { decoded: match.data, rawData: match.rawData ?? null };
+      }
     }
   }
 
@@ -271,6 +274,7 @@ export async function parseFrame(
     stateId: new Uint8Array(Array.from(entryIdBytes)),
     videoQueues: [],
     hikmicroThermal: [],
+    arduinoNiclaSenseMe: [],
     ina226: [],
     airgradientOpenAir: [],
     victronSmartSolar: [],
@@ -584,13 +588,13 @@ export async function parseFrame(
             };
             break;
           case drivers.QueueDataType.QDT_ARDUINO_NICLA_SENSE_ME_RX:
-            frame.arduinoNiclaSenseMe = {
+            frame.arduinoNiclaSenseMe!.push({
               queueId: result.queue,
               ptr: result.ptr,
               data: result.decoded as arduino_nicla_sense_me.IRxEnvelope,
               rawData: retainRawData ? result.rawData ?? null : null,
               queueType: result.type
-            };
+            });
             break;
           case drivers.QueueDataType.QDT_INA226_RX:
             frame.ina226!.push({

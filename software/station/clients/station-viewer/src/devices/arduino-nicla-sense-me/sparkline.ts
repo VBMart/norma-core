@@ -4,8 +4,9 @@ export const SPARKLINE_CAPACITY = 60;
 
 /**
  * Rolling per-device history of 3-axis samples feeding the live widget's
- * sparklines. Samples arrive one per station poll (~1 Hz); pushes are deduped
- * by an envelope-stamp key so React re-renders never duplicate a sample.
+ * sparklines. Samples arrive one per snapshot envelope (up to ~100 Hz over
+ * USB); pushes are deduped by an envelope-stamp key so React re-renders
+ * never duplicate a sample.
  */
 export class Vec3History {
   private samples: Vec3[] = [];

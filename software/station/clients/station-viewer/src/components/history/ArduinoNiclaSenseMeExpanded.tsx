@@ -1,5 +1,5 @@
 import { arduino_nicla_sense_me } from '@/api/proto.js';
-import { ME_OFFSETS, ME_REGISTER_LENGTH, f32le, u8, u32le, vec3 } from '@/devices/arduino-nicla-sense-me/values';
+import { ME_OFFSETS, ME_REGISTER_LENGTH, f32le, readQuat, u8, u32le, vec3 } from '@/devices/arduino-nicla-sense-me/values';
 import type { Vec3 } from '@/devices/arduino-nicla-sense-me/values';
 
 interface ArduinoNiclaSenseMeExpandedProps {
@@ -92,6 +92,10 @@ function signalLabel(signalType: number | null | undefined): string {
 }
 
 function parsedGroups(bytes: Uint8Array): ValueGroup[] {
+  // Euler, gravity, and linear accel are firmware-derived from the rotation
+  // vector; without a valid quaternion those registers hold zeros, not
+  // measurements — show N/A instead of plausible-looking garbage.
+  const orientationOk = readQuat(bytes) !== null;
   return [
     {
       title: 'Board',
@@ -113,8 +117,8 @@ function parsedGroups(bytes: Uint8Array): ValueGroup[] {
         { label: 'Accelerometer', value: vector(vec3(bytes, ME_OFFSETS.accel), 'g'), tone: 'text-accent-data' },
         { label: 'Gyroscope', value: vector(vec3(bytes, ME_OFFSETS.gyro), 'dps'), tone: 'text-accent-data' },
         { label: 'Magnetometer', value: vector(vec3(bytes, ME_OFFSETS.mag), 'µT'), tone: 'text-accent-data' },
-        { label: 'Linear accel', value: vector(vec3(bytes, ME_OFFSETS.linAccel), 'g'), tone: 'text-accent-secondary' },
-        { label: 'Gravity', value: vector(vec3(bytes, ME_OFFSETS.gravity), 'g'), tone: 'text-accent-secondary' },
+        { label: 'Linear accel', value: orientationOk ? vector(vec3(bytes, ME_OFFSETS.linAccel), 'g') : 'N/A', tone: 'text-accent-secondary' },
+        { label: 'Gravity', value: orientationOk ? vector(vec3(bytes, ME_OFFSETS.gravity), 'g') : 'N/A', tone: 'text-accent-secondary' },
       ],
     },
     {
@@ -122,9 +126,9 @@ function parsedGroups(bytes: Uint8Array): ValueGroup[] {
       values: [
         { label: 'Quaternion', value: quaternion(bytes), tone: 'text-accent-data' },
         { label: 'Quaternion accuracy', value: measured(f32le(bytes, ME_OFFSETS.quat + 16), 'rad'), tone: 'text-accent-info' },
-        { label: 'Heading', value: measured(f32le(bytes, ME_OFFSETS.euler), '°', 1), tone: 'text-accent-warning' },
-        { label: 'Pitch', value: measured(f32le(bytes, ME_OFFSETS.euler + 4), '°', 1), tone: 'text-accent-warning' },
-        { label: 'Roll', value: measured(f32le(bytes, ME_OFFSETS.euler + 8), '°', 1), tone: 'text-accent-warning' },
+        { label: 'Heading', value: orientationOk ? measured(f32le(bytes, ME_OFFSETS.euler), '°', 1) : 'N/A', tone: 'text-accent-warning' },
+        { label: 'Pitch', value: orientationOk ? measured(f32le(bytes, ME_OFFSETS.euler + 4), '°', 1) : 'N/A', tone: 'text-accent-warning' },
+        { label: 'Roll', value: orientationOk ? measured(f32le(bytes, ME_OFFSETS.euler + 8), '°', 1) : 'N/A', tone: 'text-accent-warning' },
       ],
     },
     {

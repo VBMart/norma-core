@@ -21,6 +21,8 @@ function buildImage(): Uint8Array {
   view.setFloat32(ME_OFFSETS.mag, 21, true);
   view.setFloat32(ME_OFFSETS.mag + 4, -7, true);
   view.setFloat32(ME_OFFSETS.mag + 8, -43, true);
+  // Valid (unit) rotation vector; euler reads are gated on it.
+  view.setFloat32(ME_OFFSETS.quat, 1, true);
   view.setFloat32(ME_OFFSETS.euler, 63, true);
   view.setFloat32(ME_OFFSETS.euler + 4, -2.1, true);
   view.setFloat32(ME_OFFSETS.euler + 8, 0.8, true);
@@ -52,6 +54,19 @@ describe('readArduinoNiclaSenseMeMainValues', () => {
     expect(values.iaq).toBeCloseTo(55.0);
     expect(values.eco2Ppm).toBeCloseTo(640.0);
     expect(values.stepCount).toBe(1234);
+  });
+
+  it('nulls quat and firmware-derived euler when the rotation vector is unpopulated', () => {
+    const image = buildImage();
+    const view = new DataView(image.buffer);
+    view.setFloat32(ME_OFFSETS.quat, 0, true); // zero quaternion: |q| < 0.5
+    const values = readArduinoNiclaSenseMeMainValues(image);
+    expect(values.quat).toBeNull();
+    expect(values.headingDeg).toBeNull();
+    expect(values.pitchDeg).toBeNull();
+    expect(values.rollDeg).toBeNull();
+    // Direct measurements stay readable.
+    expect(values.accelG?.x).toBeCloseTo(0.1);
   });
 
   it('returns nulls for short or missing buffers', () => {
