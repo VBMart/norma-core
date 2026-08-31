@@ -1,14 +1,16 @@
-//! TEMP diagnostic: print quaternion, firmware euler, and accel-implied
-//! attitude to localize the dashboard-cube orientation bug.
+//! Diagnostic: print quaternion, firmware euler, and accel-implied attitude
+//! to cross-check the orientation frames against a board on the bench.
+//! cargo run -p arduino-nicla-sense-me --example orientation_probe
 use tokio_serial::SerialPortBuilderExt;
 
 #[tokio::main]
 async fn main() -> Result<(), String> {
     let port = arduino_nicla_sense_me::find_usb_port()
-        .ok_or("no Nicla Sense ME USB device found")?;
-    let mut stream = tokio_serial::new(&port, 115_200)
+        .ok_or("no Nicla Sense ME USB device found (vid 2341 pid 0060)")?;
+    let mut stream = tokio_serial::new(&port, arduino_nicla_sense_me::SERIAL_BAUD)
         .open_native_async()
         .map_err(|error| format!("failed to open {port}: {error}"))?;
+    arduino_nicla_sense_me::prepare_port(&mut stream)?;
     let data = arduino_nicla_sense_me::read_dump(&mut stream).await?;
     let f = |off: usize| f32::from_le_bytes(data[off..off + 4].try_into().unwrap());
 
