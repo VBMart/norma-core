@@ -1,5 +1,5 @@
 import Long from 'long';
-import { airgradient_open_air_o_1pst, arduino_nicla_sense_env, dfrobot_rs485, dmesg, hikmicro, ina226, yahboom_dogzilla_lite, drivers, inference, motors_mirroring, normvla, pwm_output, st3215, sysinfo, usbvideo, vesc_trampa, victron_smartsolar_mppt } from '@/api/proto.js';
+import { airgradient_open_air_o_1pst, arduino_nicla_sense_env, dfrobot_light_rs485, dmesg, hikmicro, ina226, yahboom_dogzilla_lite, drivers, inference, motors_mirroring, normvla, pwm_output, st3215, sysinfo, usbvideo, vesc_trampa, victron_smartsolar_mppt } from '@/api/proto.js';
 import { ErrEntryNotFound, NormFsClient, type StreamEntry } from "./normfs.js";
 import { getGlobalTimeAdjustmentNs, isTimeSyncActive } from '@/api/time-sync.js';
 import {
@@ -31,7 +31,7 @@ export interface Frame {
   sysinfo?: FrameEntry<sysinfo.IEnvelope>;
   arduinoNiclaSenseEnv?: FrameEntry<arduino_nicla_sense_env.IRxEnvelope>;
   ina226?: FrameEntry<ina226.IRxEnvelope>[];
-  dfrobotRs485?: FrameEntry<dfrobot_rs485.IRxEnvelope>[];
+  dfrobotLightRs485?: FrameEntry<dfrobot_light_rs485.IRxEnvelope>[];
   airgradientOpenAir?: FrameEntry<airgradient_open_air_o_1pst.IRxEnvelope>[];
   victronSmartSolar?: FrameEntry<victron_smartsolar_mppt.IRxEnvelope>[];
   dmesg?: FrameEntry<dmesg.IRxEnvelope>;
@@ -54,7 +54,7 @@ export interface Frame {
 }
 
 // Find entry in previous frame with matching queue and pointer
-type DecodedEntry = st3215.IInferenceState | st3215.ITxEnvelope | usbvideo.IRxEnvelope | usbvideo.ITxEnvelope | hikmicro.IRxEnvelope | motors_mirroring.IRxEnvelope | sysinfo.IEnvelope | arduino_nicla_sense_env.IRxEnvelope | ina226.IRxEnvelope | airgradient_open_air_o_1pst.IRxEnvelope | victron_smartsolar_mppt.IRxEnvelope | dmesg.IRxEnvelope | yahboom_dogzilla_lite.IInferenceState | normvla.IFrame | vesc_trampa.IInferenceState | vesc_trampa.IRxEnvelope | vesc_trampa.ITxEnvelope | pwm_output.IRxEnvelope | pwm_output.ITxEnvelope | dfrobot_rs485.IRxEnvelope | null;
+type DecodedEntry = st3215.IInferenceState | st3215.ITxEnvelope | usbvideo.IRxEnvelope | usbvideo.ITxEnvelope | hikmicro.IRxEnvelope | motors_mirroring.IRxEnvelope | sysinfo.IEnvelope | arduino_nicla_sense_env.IRxEnvelope | ina226.IRxEnvelope | airgradient_open_air_o_1pst.IRxEnvelope | victron_smartsolar_mppt.IRxEnvelope | dmesg.IRxEnvelope | yahboom_dogzilla_lite.IInferenceState | normvla.IFrame | vesc_trampa.IInferenceState | vesc_trampa.IRxEnvelope | vesc_trampa.ITxEnvelope | pwm_output.IRxEnvelope | pwm_output.ITxEnvelope | dfrobot_light_rs485.IRxEnvelope | null;
 
 interface ParseFrameOptions {
   retainRawData?: boolean;
@@ -187,8 +187,8 @@ function findPreviousEntry(
   }
 
   // Check DFRobot RS485
-  if (previousFrame.dfrobotRs485) {
-    const match = previousFrame.dfrobotRs485.find(entry => entry.queueId === queue);
+  if (previousFrame.dfrobotLightRs485) {
+    const match = previousFrame.dfrobotLightRs485.find(entry => entry.queueId === queue);
     if (match) {
       const prevPtr = match.ptr;
       if (prevPtr.length === ptr.length && prevPtr.every((b, i) => b === ptr[i])) {
@@ -276,7 +276,7 @@ export async function parseFrame(
     videoQueues: [],
     hikmicroThermal: [],
     ina226: [],
-    dfrobotRs485: [],
+    dfrobotLightRs485: [],
     airgradientOpenAir: [],
     victronSmartSolar: [],
     otherEntries: retainRawData ? {} : undefined
@@ -432,11 +432,11 @@ export async function parseFrame(
                 console.error("Failed to decode ina226.RxEnvelope:", error);
               }
               break;
-            case drivers.QueueDataType.QDT_DFROBOT_RS485_RX:
+            case drivers.QueueDataType.QDT_DFROBOT_LIGHT_RS485_RX:
               try {
-                decoded = dfrobot_rs485.RxEnvelope.decode(streamEntry.data);
+                decoded = dfrobot_light_rs485.RxEnvelope.decode(streamEntry.data);
               } catch (error) {
-                console.error("Failed to decode dfrobot_rs485.RxEnvelope:", error);
+                console.error("Failed to decode dfrobot_light_rs485.RxEnvelope:", error);
               }
               break;
             case drivers.QueueDataType.QDT_AIRGRADIENT_OPEN_AIR_O_1PST_RX:
@@ -634,11 +634,11 @@ export async function parseFrame(
               queueType: result.type
             });
             break;
-          case drivers.QueueDataType.QDT_DFROBOT_RS485_RX:
-            frame.dfrobotRs485!.push({
+          case drivers.QueueDataType.QDT_DFROBOT_LIGHT_RS485_RX:
+            frame.dfrobotLightRs485!.push({
               queueId: result.queue,
               ptr: result.ptr,
-              data: result.decoded as dfrobot_rs485.IRxEnvelope,
+              data: result.decoded as dfrobot_light_rs485.IRxEnvelope,
               rawData: retainRawData ? result.rawData ?? null : null,
               queueType: result.type
             });
