@@ -46,7 +46,5 @@ message RxEnvelope {
     // Full raw register image, always starting at register 0x00.
     bytes data = 20;
 
-    reserved 21;
-
     string error = 50;
 }
