@@ -498,8 +498,9 @@ pub struct ArduinoNiclaSenseMeBoardConfig {
     #[serde(rename = "usb-port", default, skip_serializing_if = "Option::is_none")]
     pub usb_port: Option<String>,
 
-    /// Per-board override of the driver-wide poll interval (e.g. "10ms"
-    /// for ~100 Hz polling of a USB board).
+    /// Per-board override of the driver-wide poll interval. Applies to
+    /// i2c boards; usb boards stream at the firmware push rate (~100 Hz)
+    /// and ignore it.
     #[serde(
         rename = "poll-interval",
         default,

@@ -29,12 +29,24 @@ const SERIAL_NUMBER_LENGTH: usize = 6;
 pub const USB_VID: u16 = 0x2341;
 pub const USB_PID: u16 = 0x0060;
 const SERIAL_CMD_DUMP: u8 = 0x01;
+/// Starts streaming (one frame per firmware tick) and doubles as the
+/// keepalive: the firmware stops streaming unless it sees this again
+/// within 2s, so a dead host cannot leave the board transmitting.
+const SERIAL_CMD_STREAM_START: u8 = 0x02;
 const SERIAL_MAGIC: [u8; 2] = [0xA5, 0x5A];
 const SERIAL_FRAME_LEN: usize = 3 + RAW_REGISTER_LENGTH + 1;
 /// Real UART baud of the SAMD11 usb-bridge link; must match the firmware's
 /// Serial.begin. 115200 capped polling at ~50 Hz (~15 ms per 172-byte dump).
 pub const SERIAL_BAUD: u32 = 921_600;
 const SERIAL_RESPONSE_TIMEOUT: Duration = Duration::from_millis(500);
+/// Re-send the stream keepalive well within the firmware's 2s expiry.
+const STREAM_KEEPALIVE_INTERVAL: Duration = Duration::from_secs(1);
+/// Frames arrive every ~10ms while streaming; a second of silence means
+/// the stream is dead (unplugged, or pre-streaming firmware).
+const STREAM_FRAME_TIMEOUT: Duration = Duration::from_secs(1);
+/// Pace the retry loop while a streaming link is erroring (a healthy
+/// stream paces itself by frame arrival instead).
+const STREAM_ERROR_RETRY: Duration = Duration::from_millis(100);
 /// While no board is attached, re-enumerate serial ports at most this often.
 /// Enumeration walks the OS device tree (sysfs/IOKit) and is far too costly
 /// to run on every 10 ms poll tick.
@@ -66,7 +78,8 @@ pub enum ArduinoNiclaSenseMeTransport {
 pub struct ArduinoNiclaSenseMeBoardConfig {
     pub id: Option<String>,
     pub transport: ArduinoNiclaSenseMeTransport,
-    /// Per-board override of the driver-wide poll interval.
+    /// Per-board override of the driver-wide poll interval. Applies to
+    /// I2C boards; USB boards stream at the firmware push rate instead.
     pub poll_interval: Option<Duration>,
 }
 
@@ -353,15 +366,54 @@ impl I2cLink {
     }
 }
 
+/// Reads one pushed frame from the stream, scanning to the magic first so
+/// joining mid-stream (or after corruption) self-synchronizes; length or
+/// CRC mismatches just resume scanning. Times out when no valid frame
+/// arrives within STREAM_FRAME_TIMEOUT.
+async fn read_stream_frame(port: &mut SerialStream) -> Result<Bytes, String> {
+    tokio::time::timeout(STREAM_FRAME_TIMEOUT, async {
+        loop {
+            let mut byte = [0u8; 1];
+            port.read_exact(&mut byte)
+                .await
+                .map_err(|error| format!("failed to read stream: {error}"))?;
+            if byte[0] != SERIAL_MAGIC[0] {
+                continue;
+            }
+            port.read_exact(&mut byte)
+                .await
+                .map_err(|error| format!("failed to read stream: {error}"))?;
+            if byte[0] != SERIAL_MAGIC[1] {
+                continue;
+            }
+            let mut rest = [0u8; 1 + RAW_REGISTER_LENGTH + 1];
+            port.read_exact(&mut rest)
+                .await
+                .map_err(|error| format!("failed to read stream: {error}"))?;
+            if rest[0] as usize != RAW_REGISTER_LENGTH {
+                continue;
+            }
+            let payload = &rest[1..1 + RAW_REGISTER_LENGTH];
+            if crc8(payload) != rest[1 + RAW_REGISTER_LENGTH] {
+                continue;
+            }
+            return Ok(Bytes::copy_from_slice(payload));
+        }
+    })
+    .await
+    .map_err(|_| {
+        "timed out waiting for stream frame (board unplugged or firmware predates streaming)"
+            .to_string()
+    })?
+}
+
 struct UsbLink {
     pinned_port: Option<String>,
     connection: Option<(SerialStream, String)>,
     verified: bool,
-    /// Clear the OS input buffer before the next request. Set after a
-    /// timeout or parse error, and when a reply backlog is detected, so a
-    /// single desynced exchange (e.g. a reply landing just after its
-    /// timeout) can never leave the stream permanently one frame behind.
-    resync: bool,
+    /// When the next STREAM_START keepalive is due; None = stream not
+    /// started yet on this connection.
+    next_keepalive: Option<tokio::time::Instant>,
     next_discover: Option<tokio::time::Instant>,
 }
 
@@ -371,7 +423,7 @@ impl UsbLink {
             pinned_port,
             connection: None,
             verified: false,
-            resync: false,
+            next_keepalive: None,
             next_discover: None,
         }
     }
@@ -396,7 +448,7 @@ impl UsbLink {
     fn disconnect(&mut self) {
         self.connection = None;
         self.verified = false;
-        self.resync = false;
+        self.next_keepalive = None;
     }
 
     fn connect(&mut self) -> Result<(), String> {
@@ -417,7 +469,7 @@ impl UsbLink {
         debug!("Opened Arduino Nicla Sense ME USB port {name}");
         self.connection = Some((stream, name));
         self.verified = false;
-        self.resync = false;
+        self.next_keepalive = None;
         Ok(())
     }
 
@@ -425,20 +477,28 @@ impl UsbLink {
         if self.connection.is_none() {
             self.connect()?;
         }
+        let name = self
+            .connection
+            .as_ref()
+            .expect("connection populated above")
+            .1
+            .clone();
 
-        let (outcome, name) = {
-            let (stream, name) = self.connection.as_mut().expect("connection populated above");
-            if self.resync {
-                if let Err(clear_error) = stream.clear(tokio_serial::ClearBuffer::Input) {
-                    let name = name.clone();
-                    self.disconnect();
-                    return Err(format!("{name}: failed to clear input buffer: {clear_error}"));
-                }
-                self.resync = false;
+        // Start the stream / refresh the firmware's keepalive deadline.
+        let now = tokio::time::Instant::now();
+        if self.next_keepalive.is_none_or(|due| now >= due) {
+            let (stream, _) = self.connection.as_mut().expect("connection populated above");
+            if let Err(write_error) = stream.write_all(&[SERIAL_CMD_STREAM_START]).await {
+                self.disconnect();
+                return Err(format!("{name}: failed to send stream keepalive: {write_error}"));
             }
-            (read_dump_classified(stream).await, name.clone())
-        };
+            self.next_keepalive = Some(now + STREAM_KEEPALIVE_INTERVAL);
+        }
 
+        let outcome = {
+            let (stream, _) = self.connection.as_mut().expect("connection populated above");
+            read_stream_frame(stream).await
+        };
         match outcome {
             Ok(data) => {
                 if !self.verified {
@@ -449,29 +509,11 @@ impl UsbLink {
                     }
                     self.verified = true;
                 }
-                // Leftover bytes after a complete frame mean this reply was
-                // a stale one from an earlier request (each request produces
-                // exactly one reply); resync before the next request so the
-                // stream cannot stay a frame behind.
-                if let Some((stream, _)) = self.connection.as_ref() {
-                    if stream.bytes_to_read().unwrap_or(0) > 0 {
-                        self.resync = true;
-                    }
-                }
                 Ok((data, name))
             }
-            Err(DumpError::Timeout) => {
-                // The reply may still land after the deadline; drop it
-                // before the next request instead of paying a full
-                // reopen+DTR cycle for a transient hiccup.
-                self.resync = true;
-                Err(format!("{name}: timed out waiting for dump frame"))
-            }
-            Err(DumpError::Parse(message)) => {
-                self.resync = true;
-                Err(format!("{name}: {message}"))
-            }
-            Err(DumpError::Io(message)) => {
+            Err(message) => {
+                // Any stream failure (silence, port error) reconnects; the
+                // frame scanner already absorbed recoverable corruption.
                 self.disconnect();
                 Err(format!("{name}: {message}"))
             }
@@ -495,6 +537,12 @@ impl BoardLink {
             BoardLink::Usb(link) => link.poll().await.map(|(data, port)| (data, Some(port))),
         }
     }
+
+    /// Streaming links pace themselves by frame arrival (the firmware
+    /// pushes one frame per tick); polling links pace via the interval.
+    fn is_streaming(&self) -> bool {
+        matches!(self, BoardLink::Usb(_))
+    }
 }
 
 async fn run_board_worker(
@@ -512,13 +560,24 @@ async fn run_board_worker(
     // poll round-trip exceeds the interval (USB bridge latency is ~15 ms),
     // the next poll starts immediately instead of being quantized up to the
     // next interval boundary (which would halve the achievable rate).
+    // Streaming links skip this entirely: the firmware's push rate is the
+    // pacing, and sleeping here would let unread frames back up.
     let mut next_poll = tokio::time::Instant::now();
 
     loop {
-        tokio::time::sleep_until(next_poll).await;
-        next_poll = tokio::time::Instant::now() + poll_interval;
+        if !link.is_streaming() {
+            tokio::time::sleep_until(next_poll).await;
+            next_poll = tokio::time::Instant::now() + poll_interval;
+        }
 
-        match link.poll().await {
+        let poll_result = link.poll().await;
+        if link.is_streaming() && poll_result.is_err() {
+            // A failing stream returns quickly (discover backoff, dead
+            // port); pace the retry loop instead of spinning.
+            tokio::time::sleep(STREAM_ERROR_RETRY).await;
+        }
+
+        match poll_result {
             Ok((data, port_name)) => {
                 if !connected {
                     send_board_signal(
