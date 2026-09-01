@@ -58,9 +58,16 @@ Send the single byte `0x01`; the reply is one 172-byte frame: magic `0xA5 0x5A`,
 length byte `0xA8`, the 168-byte register image (latched, internally consistent), 
 and a trailing CRC8 (poly 0x07, init 0x00) over the 168-byte payload.
 
-The station polls `0x01` at high rate (~100 Hz over USB): the loop paces
-itself on an absolute 10 ms schedule, answers one command per tick, and
-always serves the freshest snapshot. Unknown command bytes are ignored.
+Used by the probe/bench examples; the station driver uses streaming instead.
+
+### Commands 0x02 / 0x03: Streaming
+
+`0x02` starts streaming: the sketch pushes one frame per 10 ms tick (the
+firmware refresh rate — a steady ~100 Hz) in the same CRC8-framed format.
+`0x02` also acts as the keepalive: streaming expires unless it is repeated
+within 2 s, so a dead host cannot leave the board transmitting. `0x03`
+stops streaming immediately. The RGB LED glows red while streaming is
+active. Unknown command bytes are ignored.
 
 
 ## Flashing
