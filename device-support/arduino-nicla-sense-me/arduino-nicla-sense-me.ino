@@ -13,12 +13,13 @@
  */
 
 #include "Arduino_BHY2.h"
+#include "Nicla_System.h"
 #include "Wire.h"
 #include "nrf.h"
 
 constexpr uint8_t I2C_ADDRESS = 0x22;
 constexpr size_t REG_MAP_SIZE = 0xA8;
-constexpr uint8_t SOFTWARE_REVISION = 2;
+constexpr uint8_t SOFTWARE_REVISION = 3;
 constexpr uint8_t PRODUCT_ID = 0x4D; // 'M'
 
 // Register offsets (must match the station driver + viewer).
@@ -59,12 +60,19 @@ constexpr float ACCEL_LSB_PER_G = 4096.0f;    // 32768 / 8g
 constexpr float GYRO_LSB_PER_DPS = 16.384f;   // 32768 / 2000dps
 constexpr float MAG_LSB_PER_UT = 16.0f;       // BMM150 0.0625 uT/LSB
 
-// USB serial dump protocol (contract with the station driver): the host
-// sends SERIAL_CMD_DUMP, the sketch replies with one frame:
+// USB serial protocol (contract with the station driver). Frame format:
 //   [0xA5, 0x5A, 0xA8, <168-byte register image>, crc8(payload)]
-// CRC8 is poly 0x07, init 0x00, computed over the payload only. Unknown
-// command bytes are ignored.
+// CRC8 is poly 0x07, init 0x00, computed over the payload only.
+// Commands (single bytes; unknown bytes are ignored):
+//   0x01 DUMP          - reply with one frame (request/reply probing)
+//   0x02 STREAM_START  - push one frame per 10 ms tick; also the keepalive:
+//                        streaming stops unless refreshed within 2 s, so a
+//                        dead host cannot leave the board transmitting
+//   0x03 STREAM_STOP   - stop pushing immediately
 constexpr uint8_t SERIAL_CMD_DUMP = 0x01;
+constexpr uint8_t SERIAL_CMD_STREAM_START = 0x02;
+constexpr uint8_t SERIAL_CMD_STREAM_STOP = 0x03;
+constexpr uint32_t STREAM_KEEPALIVE_TIMEOUT_MS = 2000;
 constexpr uint8_t SERIAL_MAGIC0 = 0xA5;
 constexpr uint8_t SERIAL_MAGIC1 = 0x5A;
 
@@ -108,25 +116,45 @@ static uint8_t latchedMap[REG_MAP_SIZE]; // frozen copy served to the host durin
 static volatile uint8_t regPointer = 0;
 static bool bhy2Ok = false;
 
-static void serviceSerialDump() {
+// Streaming deadline: 0 = off, otherwise millis() time when the stream
+// expires unless another STREAM_START keepalive arrives.
+static uint32_t streamDeadlineMillis = 0;
+
+static void sendDumpFrame() {
+  uint8_t frame[3 + REG_MAP_SIZE + 1];
+  frame[0] = SERIAL_MAGIC0;
+  frame[1] = SERIAL_MAGIC1;
+  frame[2] = (uint8_t)REG_MAP_SIZE;
+  // stableMap is only ever written by loop() (this same thread), so this
+  // copy is always a complete snapshot; no interrupt guard needed.
+  memcpy(frame + 3, stableMap, REG_MAP_SIZE);
+  frame[3 + REG_MAP_SIZE] = crc8(frame + 3, REG_MAP_SIZE);
+  Serial.write(frame, sizeof(frame));
+}
+
+static bool streamActive() {
+  return streamDeadlineMillis != 0 &&
+         (int32_t)(streamDeadlineMillis - millis()) > 0;
+}
+
+static void serviceSerialCommands() {
   // Bounded per call: drain at most a small budget of bytes and answer at
-  // most one dump command per loop() tick, so a chatty or misbehaving host
-  // can never starve sensor updates.
+  // most one dump reply per call, so a chatty or misbehaving host can
+  // never starve sensor updates.
   for (int budget = 0; budget < 16 && Serial.available() > 0; budget++) {
     int cmd = Serial.read();
-    if (cmd != SERIAL_CMD_DUMP) {
-      continue; // unknown bytes are ignored
+    if (cmd == SERIAL_CMD_STREAM_START) {
+      streamDeadlineMillis = millis() + STREAM_KEEPALIVE_TIMEOUT_MS;
+      if (streamDeadlineMillis == 0) {
+        streamDeadlineMillis = 1; // keep 0 reserved for "off" across wrap
+      }
+    } else if (cmd == SERIAL_CMD_STREAM_STOP) {
+      streamDeadlineMillis = 0;
+    } else if (cmd == SERIAL_CMD_DUMP) {
+      sendDumpFrame();
+      return; // one reply per call; remaining commands are served next call
     }
-    uint8_t frame[3 + REG_MAP_SIZE + 1];
-    frame[0] = SERIAL_MAGIC0;
-    frame[1] = SERIAL_MAGIC1;
-    frame[2] = (uint8_t)REG_MAP_SIZE;
-    // stableMap is only ever written by loop() (this same thread), so this
-    // copy is always a complete snapshot; no interrupt guard needed.
-    memcpy(frame + 3, stableMap, REG_MAP_SIZE);
-    frame[3 + REG_MAP_SIZE] = crc8(frame + 3, REG_MAP_SIZE);
-    Serial.write(frame, sizeof(frame));
-    return; // one reply per tick; remaining commands are served next tick
+    // unknown bytes are ignored
   }
 }
 
@@ -209,6 +237,12 @@ void onI2CRequest() {
 }
 
 void setup() {
+  // RGB LED (IS31FL3194 on the internal I2C bus, separate from the ESLOV
+  // peripheral bus): red = USB streaming active, off = idle.
+  nicla::begin();
+  nicla::leds.begin();
+  nicla::leds.setColor(0, 0, 0);
+
   memset(liveMap, 0, sizeof(liveMap));
 
   liveMap[REG_SOFTWARE_REVISION] = SOFTWARE_REVISION;
@@ -338,7 +372,22 @@ void loop() {
   memcpy(stableMap, liveMap, sizeof(stableMap));
   interrupts();
 
-  serviceSerialDump();
+  serviceSerialCommands();
+  const bool streaming = streamActive();
+  static bool streamLedOn = false;
+  if (streaming != streamLedOn) {
+    // Red while streaming, off when idle (or ~2s after the host dies).
+    // Written only on state change: setColor is an internal-I2C transaction
+    // and has no business running every 10 ms tick.
+    nicla::leds.setColor(streaming ? 255 : 0, 0, 0);
+    streamLedOn = streaming;
+  }
+  if (streaming) {
+    // Streaming mode: push the snapshot this tick just committed. One frame
+    // per tick = exactly the firmware refresh rate (~100 Hz), ~2 ms of the
+    // 921600-baud UART per frame.
+    sendDumpFrame();
+  }
 
   // Absolute 10 ms schedule (not a fixed delay): the loop body itself takes
   // several milliseconds, so a plain delay(10) would drop the effective
@@ -353,7 +402,7 @@ void loop() {
   }
   nextTickMillis += 10;
   while ((int32_t)(nextTickMillis - millis()) > 0) {
-    serviceSerialDump();
+    serviceSerialCommands();
     delay(1);
   }
   if ((int32_t)(nextTickMillis - millis()) < -10) {
