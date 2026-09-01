@@ -23,8 +23,7 @@ drivers:
     enabled: true
     boards:
       - id: nicla-usb
-        bus-type: usb        # autodetected by USB vid/pid 2341:0060
-        poll-interval: 10ms  # ~100 Hz live stream (storage: ~2.3 GB/day)
+        bus-type: usb   # autodetected by USB vid/pid 2341:0060; streams at ~100 Hz (~2.3 GB/day)
 inference:
 - queue-id: inference/normvla
   shm: /tmp/normvla
