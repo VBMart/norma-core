@@ -1,4 +1,5 @@
 import type { hikmicro } from '@/api/proto.js';
+import { thermalContours } from './thermal-contours';
 
 const SENSOR_WIDTH = 256;
 const SENSOR_HEIGHT = 192;
@@ -19,6 +20,7 @@ export interface ThermalRenderResult {
   width: number;
   height: number;
   rgba: Uint8ClampedArray;
+  contours?: Float32Array;
   minC: number | null;
   maxC: number | null;
   centerC: number | null;
@@ -616,12 +618,13 @@ const ARCTIC_STOPS = [
   [57, 70, 157], [45, 139, 212], [75, 207, 216], [174, 238, 208], [255, 236, 135],
 ];
 
-function toRgba(values: Float32Array, lo: number, hi: number, paletteName: ThermalPalette): Uint8ClampedArray {
+function toRgba(values: Float32Array, lo: number, hi: number, paletteName: ThermalPalette, rotateCounterclockwise: boolean): Uint8ClampedArray {
   const rgba = new Uint8ClampedArray(values.length * 4);
   const span = hi > lo ? hi - lo : 1;
   for (let i = 0; i < values.length; i += 1) {
     const value = values[i];
-    const j = i * 4;
+    // Rotate while writing the output: no extra frame allocation or pixel pass.
+    const j = (rotateCounterclockwise ? (SENSOR_WIDTH - 1 - i % SENSOR_WIDTH) * SENSOR_HEIGHT + Math.floor(i / SENSOR_WIDTH) : i) * 4;
     if (!Number.isFinite(value)) {
       rgba[j] = rgba[j + 1] = rgba[j + 2] = 241;
     } else if (paletteName === 'iron') {
@@ -653,6 +656,7 @@ export function renderThermalFrame(
   envelope: hikmicro.IRxEnvelope,
   frame: hikmicro.IThermalFrame,
   paletteName: ThermalPalette = 'iron',
+  showContours = false,
 ): ThermalRenderResult {
   let error: string | null = null;
   const payload = frame.payload ?? new Uint8Array();
@@ -679,11 +683,14 @@ export function renderThermalFrame(
   const stats = finiteStats(map);
   const lo = stats.min ?? 0;
   const hi = stats.max ?? lo + 1;
+  // This physical camera is mounted sideways; other HIKMICRO units stay native.
+  const rotateCounterclockwise = envelope.deviceInfo?.usb?.serialNumber === 'EA2976465';
 
   return {
-    width: SENSOR_WIDTH,
-    height: SENSOR_HEIGHT,
-    rgba: toRgba(map, lo, hi, paletteName),
+    width: rotateCounterclockwise ? SENSOR_HEIGHT : SENSOR_WIDTH,
+    height: rotateCounterclockwise ? SENSOR_WIDTH : SENSOR_HEIGHT,
+    rgba: toRgba(map, lo, hi, paletteName, rotateCounterclockwise),
+    contours: showContours ? thermalContours(map, SENSOR_WIDTH, SENSOR_HEIGHT, usedCalibration ? 0.5 : 16, rotateCounterclockwise) : undefined,
     minC: usedCalibration ? stats.min : null,
     maxC: usedCalibration ? stats.max : null,
     centerC: usedCalibration ? stats.center : null,
