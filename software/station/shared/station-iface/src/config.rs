@@ -558,7 +558,8 @@ pub struct DmesgConfig {
 }
 
 /// DFRobot RS-485 Modbus-RTU sensors (SEN0640/0641/0642/0644) behind a
-/// USB-to-RS485 adapter. One queue per sensor; the driver is read-only.
+/// USB-to-RS485 adapter. One queue per sensor; polling is read-only, sensor
+/// settings are written only through explicit station commands.
 /// Poll interval and baud candidates are fixed (1s; [4800, 9600]) and all
 /// sensors are auto-detected — neither is configurable.
 #[derive(Debug, Serialize, Deserialize, Clone)]
