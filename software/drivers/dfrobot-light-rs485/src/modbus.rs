@@ -268,11 +268,14 @@ pub async fn transact(
 mod tests {
     use super::*;
 
-    // Known-good frames from the DFRobot reference docs
-    // (~/projects/study/tmp/dfrobot/dfrobot-rs485-sensors.md):
+    // Known-good frames from the DFRobot wiki sample code / protocol pages:
     //   read 1 reg @0x0000 from id 1:  01 03 00 00 00 01 84 0A
-    //   read 2 regs @0x0002 from id 1: 01 03 00 02 00 02 65 CB
+    //     SEN0640 https://wiki.dfrobot.com/sen0640/docs/20431 (`Com[8]`)
+    //     SEN0642 https://wiki.dfrobot.com/sen0642/docs/20939 (`Com[8]`)
     //   read 1 reg @0x0001 from id 1:  01 03 00 01 00 01 D5 CA
+    //     SEN0642 https://wiki.dfrobot.com/sen0642/docs/20939 (`Com1[8]`, UV index)
+    //   read 2 regs @0x0002 from id 1: 01 03 00 02 00 02 65 CB
+    //     SEN0644 https://wiki.dfrobot.com/sen0644/docs/19609 (section 3.1 inquiry frame)
 
     #[test]
     fn crc16_matches_known_frames() {
