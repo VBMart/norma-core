@@ -15196,6 +15196,12 @@ export namespace pwm_output {
         public static getTypeUrl(typeUrlPrefix?: string): string;
     }
 
+    /** WaveRepeatMode enum. */
+    enum WaveRepeatMode {
+        WAVE_REPEAT_MODE_FINITE = 0,
+        WAVE_REPEAT_MODE_FOREVER = 1
+    }
+
     /** Properties of a WaveCommand. */
     interface IWaveCommand {
 
@@ -15207,6 +15213,9 @@ export namespace pwm_output {
 
         /** WaveCommand repeat */
         repeat?: (number|null);
+
+        /** WaveCommand repeatMode */
+        repeatMode?: (pwm_output.WaveRepeatMode|null);
     }
 
     /** Represents a WaveCommand. */
@@ -15226,6 +15235,9 @@ export namespace pwm_output {
 
         /** WaveCommand repeat. */
         public repeat: number;
+
+        /** WaveCommand repeatMode. */
+        public repeatMode: pwm_output.WaveRepeatMode;
 
         /**
          * Creates a new WaveCommand instance using the specified properties.
