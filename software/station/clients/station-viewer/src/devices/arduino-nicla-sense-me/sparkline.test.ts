@@ -32,8 +32,6 @@ describe('Vec3History', () => {
     history.push('a', { x: 1, y: 1, z: 1 });
     expect(history.get()).toHaveLength(1);
   });
-
-
 });
 
 describe('historyFor', () => {

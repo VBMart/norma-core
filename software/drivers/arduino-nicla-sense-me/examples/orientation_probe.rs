@@ -10,7 +10,7 @@ async fn main() -> Result<(), String> {
     let mut stream = tokio_serial::new(&port, arduino_nicla_sense_me::SERIAL_BAUD)
         .open_native_async()
         .map_err(|error| format!("failed to open {port}: {error}"))?;
-    arduino_nicla_sense_me::prepare_port(&mut stream)?;
+    arduino_nicla_sense_me::prepare_port(&mut stream).await?;
     let data = arduino_nicla_sense_me::read_dump(&mut stream).await?;
     let f = |off: usize| f32::from_le_bytes(data[off..off + 4].try_into().unwrap());
 
@@ -18,15 +18,20 @@ async fn main() -> Result<(), String> {
     let (heading, pitch, roll) = (f(0x64), f(0x68), f(0x6C));
     let (ax, ay, az) = (f(0x14), f(0x18), f(0x1C));
 
-    // Ground truth from gravity: aircraft convention (x fwd, y right, z ??):
+    // Ground truth from gravity, aircraft convention (x fwd, y right, z down):
     // pitch = asin(-ax/|a|), roll = atan2(ay, az) for z-down convention.
     let norm = (ax * ax + ay * ay + az * az).sqrt();
     let gt_pitch = (-ax / norm).asin().to_degrees();
     let gt_roll = (ay).atan2(az).to_degrees();
 
-    println!("quat:            w={qw:+.3} x={qx:+.3} y={qy:+.3} z={qz:+.3}  |q|={:.3}",
-        (qw * qw + qx * qx + qy * qy + qz * qz).sqrt());
-    println!("quat accuracy:   {:.3} rad (BHY2 heading-accuracy estimate)", f(0x60));
+    println!(
+        "quat:            w={qw:+.3} x={qx:+.3} y={qy:+.3} z={qz:+.3}  |q|={:.3}",
+        (qw * qw + qx * qx + qy * qy + qz * qz).sqrt()
+    );
+    println!(
+        "quat accuracy:   {:.3} rad (BHY2 heading-accuracy estimate)",
+        f(0x60)
+    );
     println!("firmware euler:  heading={heading:+.1}  pitch={pitch:+.1}  roll={roll:+.1}");
     println!("accel raw g:     x={ax:+.3} y={ay:+.3} z={az:+.3}");
     println!("gravity-implied: pitch={gt_pitch:+.1}  roll={gt_roll:+.1}   (aircraft, z-down)");

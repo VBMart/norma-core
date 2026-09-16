@@ -1,15 +1,18 @@
 /*
- * Nicla Sense ME → I2C register-map peripheral for norma-core station.
+ * Nicla Sense ME → register-map peripheral for norma-core station.
  *
- * Exposes all BHY2 sensor outputs as a 168-byte little-endian register map
- * at I2C address 0x22 (ESLOV / external I2C). The map layout is the contract
- * shared with software/drivers/arduino-nicla-sense-me and the station-viewer;
- * see README.md in this directory. Register-pointer semantics: a 1-byte write
- * sets the read pointer; reads return sequential bytes. Writing pointer 0x00
- * synchronously latches a consistent snapshot (inside the I2C receive
- * handler) that all subsequent reads are served from, so a chunked full-map
- * read never tears.
- * The same image is served over USB CDC serial: command 0x01 returns one CRC8-framed snapshot (see README).
+ * Exposes all BHY2 sensor outputs as a 168-byte little-endian register map.
+ * The map layout is the contract shared with
+ * software/drivers/arduino-nicla-sense-me and the station-viewer; see
+ * README.md in this directory. Two transports serve the same image:
+ *  - I2C peripheral at address 0x22 (ESLOV / external I2C). A 1-byte write
+ *    sets the read pointer; reads return sequential bytes. Writing pointer
+ *    0x00 synchronously latches a consistent snapshot (inside the I2C
+ *    receive handler) that all subsequent reads are served from, so a
+ *    chunked full-map read never tears.
+ *  - USB CDC serial: CRC8-framed snapshots, either one per 0x01 request or
+ *    streamed at the 10 ms tick rate after 0x02 (see the serial protocol
+ *    constants below).
  */
 
 #include "Arduino_BHY2.h"
@@ -19,7 +22,7 @@
 
 constexpr uint8_t I2C_ADDRESS = 0x22;
 constexpr size_t REG_MAP_SIZE = 0xA8;
-constexpr uint8_t SOFTWARE_REVISION = 3;
+constexpr uint8_t SOFTWARE_REVISION = 4;
 constexpr uint8_t PRODUCT_ID = 0x4D; // 'M'
 
 // Register offsets (must match the station driver + viewer).
@@ -64,7 +67,8 @@ constexpr float MAG_LSB_PER_UT = 16.0f;       // BMM150 0.0625 uT/LSB
 //   [0xA5, 0x5A, 0xA8, <168-byte register image>, crc8(payload)]
 // CRC8 is poly 0x07, init 0x00, computed over the payload only.
 // Commands (single bytes; unknown bytes are ignored):
-//   0x01 DUMP          - reply with one frame (request/reply probing)
+//   0x01 DUMP          - reply with one frame (request/reply probing);
+//                        ignored while streaming, the pushed frame is the reply
 //   0x02 STREAM_START  - push one frame per 10 ms tick; also the keepalive:
 //                        streaming stops unless refreshed within 2 s, so a
 //                        dead host cannot leave the board transmitting
@@ -138,9 +142,11 @@ static bool streamActive() {
 }
 
 static void serviceSerialCommands() {
-  // Bounded per call: drain at most a small budget of bytes and answer at
-  // most one dump reply per call, so a chatty or misbehaving host can
-  // never starve sensor updates.
+  // Bounded per call: drain at most a small budget of bytes and send at
+  // most one dump reply, so a chatty or misbehaving host can never starve
+  // sensor updates. Every byte in the budget is applied before replying,
+  // so DUMP followed by STREAM_STOP in one batch yields exactly one frame.
+  bool dumpRequested = false;
   for (int budget = 0; budget < 16 && Serial.available() > 0; budget++) {
     int cmd = Serial.read();
     if (cmd == SERIAL_CMD_STREAM_START) {
@@ -151,10 +157,14 @@ static void serviceSerialCommands() {
     } else if (cmd == SERIAL_CMD_STREAM_STOP) {
       streamDeadlineMillis = 0;
     } else if (cmd == SERIAL_CMD_DUMP) {
-      sendDumpFrame();
-      return; // one reply per call; remaining commands are served next call
+      dumpRequested = true;
     }
     // unknown bytes are ignored
+  }
+  // While streaming the pushed frame is the reply; answering DUMP as well
+  // would put a second blocking 172-byte write (~2 ms) into the tick.
+  if (dumpRequested && !streamActive()) {
+    sendDumpFrame();
   }
 }
 
@@ -374,6 +384,12 @@ void loop() {
 
   serviceSerialCommands();
   const bool streaming = streamActive();
+  if (!streaming) {
+    // Stopped or expired: clear the deadline, otherwise the signed
+    // difference in streamActive() turns positive again once millis()
+    // wraps past it (~24.8 days) and streaming would resume unattended.
+    streamDeadlineMillis = 0;
+  }
   static bool streamLedOn = false;
   if (streaming != streamLedOn) {
     // Red while streaming, off when idle (or ~2s after the host dies).

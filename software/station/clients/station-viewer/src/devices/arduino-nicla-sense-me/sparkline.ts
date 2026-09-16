@@ -26,7 +26,6 @@ export class Vec3History {
     this.trim();
   }
 
-
   get(): readonly Vec3[] {
     return this.samples;
   }

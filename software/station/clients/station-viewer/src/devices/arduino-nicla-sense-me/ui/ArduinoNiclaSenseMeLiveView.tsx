@@ -13,7 +13,6 @@ const AXIS_COLORS = {
   z: 'var(--color-accent-success)',
 } as const;
 
-
 function formatDecimal(value: number | null, decimals = 2): string {
   return value === null || !Number.isFinite(value) ? 'N/A' : value.toFixed(decimals);
 }

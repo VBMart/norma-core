@@ -28,13 +28,19 @@ const SERIAL_NUMBER_LENGTH: usize = 6;
 
 pub const USB_VID: u16 = 0x2341;
 pub const USB_PID: u16 = 0x0060;
+/// Request one frame (ignored by the firmware while it is streaming).
 const SERIAL_CMD_DUMP: u8 = 0x01;
 /// Starts streaming (one frame per firmware tick) and doubles as the
 /// keepalive: the firmware stops streaming unless it sees this again
 /// within 2s, so a dead host cannot leave the board transmitting.
-const SERIAL_CMD_STREAM_START: u8 = 0x02;
+pub const SERIAL_CMD_STREAM_START: u8 = 0x02;
+/// Stops streaming immediately.
+pub const SERIAL_CMD_STREAM_STOP: u8 = 0x03;
 const SERIAL_MAGIC: [u8; 2] = [0xA5, 0x5A];
 const SERIAL_FRAME_LEN: usize = 3 + RAW_REGISTER_LENGTH + 1;
+/// Read size for the frame scanner: several frames of headroom so a
+/// backlog drains in a few syscalls rather than one per byte.
+const SERIAL_READ_CHUNK: usize = 4 * SERIAL_FRAME_LEN;
 /// Real UART baud of the SAMD11 usb-bridge link; must match the firmware's
 /// Serial.begin. 115200 capped polling at ~50 Hz (~15 ms per 172-byte dump).
 pub const SERIAL_BAUD: u32 = 921_600;
@@ -47,6 +53,8 @@ const STREAM_FRAME_TIMEOUT: Duration = Duration::from_secs(1);
 /// Pace the retry loop while a streaming link is erroring (a healthy
 /// stream paces itself by frame arrival instead).
 const STREAM_ERROR_RETRY: Duration = Duration::from_millis(100);
+/// A link reports frames its scanner had to discard at most this often.
+const BAD_FRAME_REPORT_INTERVAL: Duration = Duration::from_secs(10);
 /// While no board is attached, re-enumerate serial ports at most this often.
 /// Enumeration walks the OS device tree (sysfs/IOKit) and is far too costly
 /// to run on every 10 ms poll tick.
@@ -224,7 +232,14 @@ impl ArduinoNiclaSenseMeDriver {
                         device: AsyncI2cDevice::new(*i2c_bus, DEFAULT_I2C_ADDRESS),
                     }),
                     ArduinoNiclaSenseMeTransport::Usb { usb_port } => {
-                        BoardLink::Usb(UsbLink::new(usb_port.clone()))
+                        if board.poll_interval.is_some() {
+                            warn!(
+                                "Arduino Nicla Sense ME board {} is on USB: poll-interval is \
+                                 ignored, the firmware streams at ~100 Hz",
+                                board.id
+                            );
+                        }
+                        BoardLink::Usb(Box::new(UsbLink::new(usb_port.clone())))
                     }
                 };
                 tokio::spawn(run_board_worker(normfs, rx_queue_id, board, interval, link))
@@ -254,7 +269,11 @@ fn crc8(data: &[u8]) -> u8 {
     for &byte in data {
         crc ^= byte;
         for _ in 0..8 {
-            crc = if crc & 0x80 != 0 { (crc << 1) ^ 0x07 } else { crc << 1 };
+            crc = if crc & 0x80 != 0 {
+                (crc << 1) ^ 0x07
+            } else {
+                crc << 1
+            };
         }
     }
     crc
@@ -265,7 +284,10 @@ fn parse_dump_frame(frame: &[u8]) -> Result<Bytes, String> {
         return Err(format!("unexpected frame length {}", frame.len()));
     }
     if frame[0..2] != SERIAL_MAGIC {
-        return Err(format!("bad frame magic {:#04x} {:#04x}", frame[0], frame[1]));
+        return Err(format!(
+            "bad frame magic {:#04x} {:#04x}",
+            frame[0], frame[1]
+        ));
     }
     if frame[2] as usize != RAW_REGISTER_LENGTH {
         return Err(format!("bad payload length {:#04x}", frame[2]));
@@ -274,7 +296,9 @@ fn parse_dump_frame(frame: &[u8]) -> Result<Bytes, String> {
     let expected = frame[3 + RAW_REGISTER_LENGTH];
     let computed = crc8(payload);
     if computed != expected {
-        return Err(format!("crc mismatch: computed {computed:#04x}, frame has {expected:#04x}"));
+        return Err(format!(
+            "crc mismatch: computed {computed:#04x}, frame has {expected:#04x}"
+        ));
     }
     Ok(Bytes::copy_from_slice(payload))
 }
@@ -311,47 +335,112 @@ pub fn find_usb_port() -> Option<String> {
 }
 
 /// Prepares a freshly opened port: asserts DTR (the mbed-core USB CDC stack
-/// treats the port as closed until the host raises DTR) and clears any stale
-/// input. Run once per connection — per-request ioctls cost milliseconds on
-/// macOS and cap the achievable poll rate.
-pub fn prepare_port(port: &mut SerialStream) -> Result<(), String> {
+/// treats the port as closed until the host raises DTR), stops any stream a
+/// previous host left running (the firmware would otherwise keep pushing
+/// for up to 2 s), and clears what has already arrived. Run once per
+/// connection — per-request ioctls cost milliseconds on macOS.
+pub async fn prepare_port(port: &mut SerialStream) -> Result<(), String> {
     port.write_data_terminal_ready(true)
         .map_err(|error| format!("failed to assert DTR: {error}"))?;
+    port.write_all(&[SERIAL_CMD_STREAM_STOP])
+        .await
+        .map_err(|error| format!("failed to send stream stop: {error}"))?;
+    // Let the firmware see the stop and finish the frame it may be pushing
+    // (~2 ms on the wire) before discarding the input.
+    tokio::time::sleep(Duration::from_millis(20)).await;
     port.clear(tokio_serial::ClearBuffer::Input)
         .map_err(|error| format!("failed to clear input buffer: {error}"))?;
     Ok(())
 }
 
-/// How one dump exchange failed — the connection-handling consequences
-/// differ per class (see `UsbLink::poll`).
-enum DumpError {
-    /// The request went out but no complete frame arrived in time; the
-    /// reply may still land later.
-    Timeout,
-    /// A complete frame arrived but failed validation (magic/length/CRC).
-    Parse(String),
-    /// The port itself failed.
-    Io(String),
+/// Incremental scanner over the serial byte stream. Bytes accumulate in
+/// `pending`; `next_frame` returns the first complete, valid frame and
+/// discards everything before it. A magic match that fails validation (a
+/// payload byte pair when joining mid-stream, or real corruption) advances
+/// the search by one byte, so no static payload pattern can lock the scan
+/// onto a fixed offset of every frame.
+#[derive(Default)]
+pub struct FrameScanner {
+    pending: Vec<u8>,
+    bad_frames: u32,
 }
 
-async fn read_dump_classified(port: &mut SerialStream) -> Result<Bytes, DumpError> {
+impl FrameScanner {
+    pub fn push(&mut self, bytes: &[u8]) {
+        self.pending.extend_from_slice(bytes);
+    }
+
+    /// The next valid frame's payload, or None when more bytes are needed.
+    pub fn next_frame(&mut self) -> Option<Bytes> {
+        let mut search_from = 0;
+        while let Some(offset) = find_magic(&self.pending[search_from..]) {
+            let start = search_from + offset;
+            if self.pending.len() - start < SERIAL_FRAME_LEN {
+                self.pending.drain(..start);
+                return None;
+            }
+            match parse_dump_frame(&self.pending[start..start + SERIAL_FRAME_LEN]) {
+                Ok(payload) => {
+                    self.pending.drain(..start + SERIAL_FRAME_LEN);
+                    return Some(payload);
+                }
+                Err(_) => {
+                    self.bad_frames += 1;
+                    search_from = start + 1;
+                }
+            }
+        }
+        // No frame start in sight: keep only a possible leading magic byte.
+        let keep = usize::from(self.pending.last() == Some(&SERIAL_MAGIC[0]));
+        self.pending.drain(..self.pending.len() - keep);
+        None
+    }
+
+    /// Frames that matched the magic but failed length/CRC validation
+    /// since the last call. Expect one when joining a stream mid-frame.
+    pub fn take_bad_frames(&mut self) -> u32 {
+        std::mem::take(&mut self.bad_frames)
+    }
+}
+
+fn find_magic(bytes: &[u8]) -> Option<usize> {
+    bytes.windows(2).position(|pair| pair == SERIAL_MAGIC)
+}
+
+/// Reads from the port until the scanner yields one valid frame, or
+/// `timeout` passes without one.
+pub async fn read_frame(
+    port: &mut SerialStream,
+    scanner: &mut FrameScanner,
+    timeout: Duration,
+) -> Result<Bytes, String> {
+    tokio::time::timeout(timeout, async {
+        loop {
+            if let Some(payload) = scanner.next_frame() {
+                return Ok(payload);
+            }
+            let mut chunk = [0u8; SERIAL_READ_CHUNK];
+            let read = port
+                .read(&mut chunk)
+                .await
+                .map_err(|error| format!("failed to read serial port: {error}"))?;
+            if read == 0 {
+                return Err("serial port closed".to_string());
+            }
+            scanner.push(&chunk[..read]);
+        }
+    })
+    .await
+    .map_err(|_| format!("no valid frame within {timeout:?}"))?
+}
+
+/// One request/reply dump exchange (command 0x01). Used by the diagnostic
+/// examples; the driver itself consumes the firmware's push stream.
+pub async fn read_dump(port: &mut SerialStream) -> Result<Bytes, String> {
     port.write_all(&[SERIAL_CMD_DUMP])
         .await
-        .map_err(|error| DumpError::Io(format!("failed to send dump command: {error}")))?;
-    let mut frame = [0u8; SERIAL_FRAME_LEN];
-    tokio::time::timeout(SERIAL_RESPONSE_TIMEOUT, port.read_exact(&mut frame))
-        .await
-        .map_err(|_| DumpError::Timeout)?
-        .map_err(|error| DumpError::Io(format!("failed to read dump frame: {error}")))?;
-    parse_dump_frame(&frame).map_err(DumpError::Parse)
-}
-
-pub async fn read_dump(port: &mut SerialStream) -> Result<Bytes, String> {
-    match read_dump_classified(port).await {
-        Ok(data) => Ok(data),
-        Err(DumpError::Timeout) => Err("timed out waiting for dump frame".to_string()),
-        Err(DumpError::Parse(message)) | Err(DumpError::Io(message)) => Err(message),
-    }
+        .map_err(|error| format!("failed to send dump command: {error}"))?;
+    read_frame(port, &mut FrameScanner::default(), SERIAL_RESPONSE_TIMEOUT).await
 }
 
 struct I2cLink {
@@ -366,55 +455,19 @@ impl I2cLink {
     }
 }
 
-/// Reads one pushed frame from the stream, scanning to the magic first so
-/// joining mid-stream (or after corruption) self-synchronizes; length or
-/// CRC mismatches just resume scanning. Times out when no valid frame
-/// arrives within STREAM_FRAME_TIMEOUT.
-async fn read_stream_frame(port: &mut SerialStream) -> Result<Bytes, String> {
-    tokio::time::timeout(STREAM_FRAME_TIMEOUT, async {
-        loop {
-            let mut byte = [0u8; 1];
-            port.read_exact(&mut byte)
-                .await
-                .map_err(|error| format!("failed to read stream: {error}"))?;
-            if byte[0] != SERIAL_MAGIC[0] {
-                continue;
-            }
-            port.read_exact(&mut byte)
-                .await
-                .map_err(|error| format!("failed to read stream: {error}"))?;
-            if byte[0] != SERIAL_MAGIC[1] {
-                continue;
-            }
-            let mut rest = [0u8; 1 + RAW_REGISTER_LENGTH + 1];
-            port.read_exact(&mut rest)
-                .await
-                .map_err(|error| format!("failed to read stream: {error}"))?;
-            if rest[0] as usize != RAW_REGISTER_LENGTH {
-                continue;
-            }
-            let payload = &rest[1..1 + RAW_REGISTER_LENGTH];
-            if crc8(payload) != rest[1 + RAW_REGISTER_LENGTH] {
-                continue;
-            }
-            return Ok(Bytes::copy_from_slice(payload));
-        }
-    })
-    .await
-    .map_err(|_| {
-        "timed out waiting for stream frame (board unplugged or firmware predates streaming)"
-            .to_string()
-    })?
-}
-
 struct UsbLink {
     pinned_port: Option<String>,
     connection: Option<(SerialStream, String)>,
+    scanner: FrameScanner,
     verified: bool,
     /// When the next STREAM_START keepalive is due; None = stream not
     /// started yet on this connection.
     next_keepalive: Option<tokio::time::Instant>,
     next_discover: Option<tokio::time::Instant>,
+    /// Discarded frames on this connection not yet reported, and when the
+    /// next report may go out.
+    bad_frames: u32,
+    next_bad_frame_report: Option<tokio::time::Instant>,
 }
 
 impl UsbLink {
@@ -422,9 +475,12 @@ impl UsbLink {
         Self {
             pinned_port,
             connection: None,
+            scanner: FrameScanner::default(),
             verified: false,
             next_keepalive: None,
             next_discover: None,
+            bad_frames: 0,
+            next_bad_frame_report: None,
         }
     }
 
@@ -445,18 +501,29 @@ impl UsbLink {
         }
     }
 
-    fn disconnect(&mut self) {
-        self.connection = None;
+    async fn disconnect(&mut self) {
+        if let Some((mut stream, _)) = self.connection.take() {
+            // Best effort: stop the firmware pushing into a port nobody
+            // reads (it would expire on its own after 2 s).
+            let _ = tokio::time::timeout(
+                Duration::from_millis(50),
+                stream.write_all(&[SERIAL_CMD_STREAM_STOP]),
+            )
+            .await;
+        }
+        self.scanner = FrameScanner::default();
         self.verified = false;
         self.next_keepalive = None;
+        self.bad_frames = 0;
+        self.next_bad_frame_report = None;
     }
 
-    fn connect(&mut self) -> Result<(), String> {
+    async fn connect(&mut self) -> Result<(), String> {
         let now = tokio::time::Instant::now();
-        if let Some(next_discover) = self.next_discover {
-            if now < next_discover {
-                return Err(self.no_device_error());
-            }
+        if let Some(next_discover) = self.next_discover
+            && now < next_discover
+        {
+            return Err(self.no_device_error());
         }
         self.next_discover = Some(now + USB_DISCOVER_BACKOFF);
 
@@ -465,17 +532,22 @@ impl UsbLink {
             .timeout(SERIAL_RESPONSE_TIMEOUT)
             .open_native_async()
             .map_err(|error| format!("failed to open {name}: {error}"))?;
-        prepare_port(&mut stream).map_err(|error| format!("{name}: {error}"))?;
+        prepare_port(&mut stream)
+            .await
+            .map_err(|error| format!("{name}: {error}"))?;
         debug!("Opened Arduino Nicla Sense ME USB port {name}");
         self.connection = Some((stream, name));
+        self.scanner = FrameScanner::default();
         self.verified = false;
         self.next_keepalive = None;
+        self.bad_frames = 0;
+        self.next_bad_frame_report = None;
         Ok(())
     }
 
     async fn poll(&mut self) -> Result<(Bytes, String), String> {
         if self.connection.is_none() {
-            self.connect()?;
+            self.connect().await?;
         }
         let name = self
             .connection
@@ -487,35 +559,63 @@ impl UsbLink {
         // Start the stream / refresh the firmware's keepalive deadline.
         let now = tokio::time::Instant::now();
         if self.next_keepalive.is_none_or(|due| now >= due) {
-            let (stream, _) = self.connection.as_mut().expect("connection populated above");
+            let (stream, _) = self
+                .connection
+                .as_mut()
+                .expect("connection populated above");
             if let Err(write_error) = stream.write_all(&[SERIAL_CMD_STREAM_START]).await {
-                self.disconnect();
-                return Err(format!("{name}: failed to send stream keepalive: {write_error}"));
+                self.disconnect().await;
+                return Err(format!(
+                    "{name}: failed to send stream keepalive: {write_error}"
+                ));
             }
             self.next_keepalive = Some(now + STREAM_KEEPALIVE_INTERVAL);
         }
 
         let outcome = {
-            let (stream, _) = self.connection.as_mut().expect("connection populated above");
-            read_stream_frame(stream).await
+            let (stream, _) = self
+                .connection
+                .as_mut()
+                .expect("connection populated above");
+            read_frame(stream, &mut self.scanner, STREAM_FRAME_TIMEOUT).await
         };
         match outcome {
             Ok(data) => {
+                let bad_frames = self.scanner.take_bad_frames();
                 if !self.verified {
                     let product_id = data.get(PRODUCT_ID_REGISTER).copied();
                     if product_id != Some(PRODUCT_ID) {
-                        self.disconnect();
+                        self.disconnect().await;
                         return Err(format!("{name}: unexpected product id {product_id:?}"));
                     }
                     self.verified = true;
+                } else {
+                    // Discards on the first frame are the mid-stream join;
+                    // afterwards they mean corruption or a backlog overflow.
+                    // Report them, rate-limited, rather than dropping silently.
+                    self.bad_frames += bad_frames;
+                    if self.bad_frames > 0
+                        && self.next_bad_frame_report.is_none_or(|due| now >= due)
+                    {
+                        warn!(
+                            "Arduino Nicla Sense ME {name}: discarded {} corrupt or misaligned \
+                             frame(s) since the last report",
+                            self.bad_frames
+                        );
+                        self.bad_frames = 0;
+                        self.next_bad_frame_report = Some(now + BAD_FRAME_REPORT_INTERVAL);
+                    }
                 }
                 Ok((data, name))
             }
             Err(message) => {
                 // Any stream failure (silence, port error) reconnects; the
                 // frame scanner already absorbed recoverable corruption.
-                self.disconnect();
-                Err(format!("{name}: {message}"))
+                self.disconnect().await;
+                Err(format!(
+                    "{name}: {message} (board unplugged, or its firmware predates \
+                     streaming and needs reflashing)"
+                ))
             }
         }
     }
@@ -527,7 +627,7 @@ impl UsbLink {
 /// `Ok(image)` / `Err(message)`.
 enum BoardLink {
     I2c(I2cLink),
-    Usb(UsbLink),
+    Usb(Box<UsbLink>),
 }
 
 impl BoardLink {
@@ -556,8 +656,8 @@ async fn run_board_worker(
     let mut last_port = None::<String>;
     let mut last_data = None::<Bytes>;
     let mut last_error = None::<String>;
-    // Min-interval pacing rather than a fixed-boundary interval: when the
-    // poll round-trip exceeds the interval (USB bridge latency is ~15 ms),
+    // Min-interval pacing rather than a fixed-boundary interval: when an
+    // I2C poll round-trip (six chunked SMBus reads) exceeds the interval,
     // the next poll starts immediately instead of being quantized up to the
     // next interval boundary (which would halve the achievable rate).
     // Streaming links skip this entirely: the firmware's push rate is the
@@ -785,7 +885,10 @@ mod tests {
         let info = parse_device_info(&data).expect("info");
         assert_eq!(info.software_revision, 1);
         assert_eq!(info.product_id, 0x4D);
-        assert_eq!(info.serial_number.as_ref(), &[0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF]);
+        assert_eq!(
+            info.serial_number.as_ref(),
+            &[0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF]
+        );
     }
 
     #[test]
@@ -814,6 +917,59 @@ mod tests {
         let frame = build_frame(&payload);
         let parsed = parse_dump_frame(&frame).expect("valid frame parses");
         assert_eq!(parsed.as_ref(), payload.as_slice());
+    }
+
+    #[test]
+    fn frame_scanner_joins_mid_stream_and_survives_false_magic_in_payload() {
+        // A static payload pair equal to the magic (e.g. inside the serial
+        // number) must not lock the scanner onto that offset.
+        let mut payload = vec![0u8; RAW_REGISTER_LENGTH];
+        payload[SERIAL_NUMBER_REGISTER] = SERIAL_MAGIC[0];
+        payload[SERIAL_NUMBER_REGISTER + 1] = SERIAL_MAGIC[1];
+        payload[0x20] = 1;
+        let frame = build_frame(&payload);
+
+        // Join exactly at the false magic of frame 0, then two full frames.
+        let mut stream = frame[3 + SERIAL_NUMBER_REGISTER..].to_vec();
+        stream.extend_from_slice(&frame);
+        stream.extend_from_slice(&frame);
+
+        let mut scanner = FrameScanner::default();
+        scanner.push(&stream);
+        assert_eq!(scanner.next_frame().as_deref(), Some(payload.as_slice()));
+        assert_eq!(scanner.next_frame().as_deref(), Some(payload.as_slice()));
+        assert_eq!(scanner.next_frame(), None);
+        assert!(scanner.take_bad_frames() >= 1);
+        assert_eq!(scanner.take_bad_frames(), 0);
+    }
+
+    #[test]
+    fn frame_scanner_handles_split_reads_and_repeated_magic_byte() {
+        let payload = vec![7u8; RAW_REGISTER_LENGTH];
+        let frame = build_frame(&payload);
+        let mut scanner = FrameScanner::default();
+
+        // A stray magic byte right before a real frame start.
+        scanner.push(&[SERIAL_MAGIC[0]]);
+        scanner.push(&frame[..100]);
+        assert_eq!(scanner.next_frame(), None);
+        scanner.push(&frame[100..]);
+        assert_eq!(scanner.next_frame().as_deref(), Some(payload.as_slice()));
+        assert_eq!(scanner.take_bad_frames(), 0);
+    }
+
+    #[test]
+    fn frame_scanner_counts_and_skips_corrupt_frames() {
+        let payload = vec![3u8; RAW_REGISTER_LENGTH];
+        let good = build_frame(&payload);
+        let mut bad = good.clone();
+        *bad.last_mut().unwrap() ^= 0xFF;
+
+        let mut scanner = FrameScanner::default();
+        scanner.push(&bad);
+        scanner.push(&good);
+        assert_eq!(scanner.next_frame().as_deref(), Some(payload.as_slice()));
+        assert_eq!(scanner.take_bad_frames(), 1);
     }
 
     #[test]

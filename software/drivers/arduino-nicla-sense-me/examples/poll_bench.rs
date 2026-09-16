@@ -19,7 +19,7 @@ async fn main() -> Result<(), String> {
         .timeout(Duration::from_millis(500))
         .open_native_async()
         .map_err(|error| format!("failed to open {port}: {error}"))?;
-    arduino_nicla_sense_me::prepare_port(&mut stream)?;
+    arduino_nicla_sense_me::prepare_port(&mut stream).await?;
     println!("port: {port}, {ITERATIONS} back-to-back dumps after {WARMUP} warmup polls");
 
     for _ in 0..WARMUP {
@@ -40,18 +40,27 @@ async fn main() -> Result<(), String> {
     durations.sort();
     let percentile = |p: f64| durations[((durations.len() - 1) as f64 * p) as usize];
     let avg = total / ITERATIONS as u32;
-    println!("round-trip:  min {:?}  p50 {:?}  p90 {:?}  p99 {:?}  max {:?}",
-        durations[0], percentile(0.50), percentile(0.90), percentile(0.99),
-        durations[durations.len() - 1]);
-    println!("average:     {avg:?}/frame -> sustained {:.1} Hz (unpaced)",
-        ITERATIONS as f64 / total.as_secs_f64());
+    println!(
+        "round-trip:  min {:?}  p50 {:?}  p90 {:?}  p99 {:?}  max {:?}",
+        durations[0],
+        percentile(0.50),
+        percentile(0.90),
+        percentile(0.99),
+        durations[durations.len() - 1]
+    );
+    println!(
+        "average:     {avg:?}/frame -> sustained {:.1} Hz (unpaced)",
+        ITERATIONS as f64 / total.as_secs_f64()
+    );
 
     // Firmware tick deltas between consecutive frames (u8 counter, one tick
     // per 10 ms refresh): delta 0 = same snapshot twice (polling faster than
     // the firmware refreshes), 1 = every frame fresh, >1 = frames skipped.
     let mut deltas = BTreeMap::new();
     for pair in counters.windows(2) {
-        *deltas.entry(pair[1].wrapping_sub(pair[0])).or_insert(0usize) += 1;
+        *deltas
+            .entry(pair[1].wrapping_sub(pair[0]))
+            .or_insert(0usize) += 1;
     }
     let histogram = deltas
         .iter()
