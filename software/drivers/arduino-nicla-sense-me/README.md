@@ -35,8 +35,3 @@ That is the entire configuration. There is no port, baud or board list:
   UART rate between the bridge and the nRF52, so it bounds throughput; it is a
   constant in the driver, not a config key.
 - **Multiple boards** work out of the box; each gets its own worker and queue.
-
-### Storage planning
-
-A board writes one snapshot every 10 ms. With the envelope overhead that is
-roughly 2.3 GB per board per day of queue data.
