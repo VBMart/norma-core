@@ -209,17 +209,7 @@ export default function ArduinoNiclaSenseMeExpanded({ data }: ArduinoNiclaSenseM
       <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
         <SummaryCell label="Signal" value={signalLabel(data.signalType)} tone={data.error ? 'text-accent-critical' : 'text-accent-success'} />
         <SummaryCell label="Device" value={device?.id ?? 'N/A'} tone="text-accent-info" />
-        <SummaryCell
-          label="Transport"
-          value={
-            device
-              ? device.transport === 'usb'
-                ? `usb ${device.usbPort || ''}`.trim()
-                : `bus ${device.i2cBus ?? 'N/A'} / ${hexByte(device.i2cAddress)}`
-              : 'N/A'
-          }
-          tone="text-accent-warning"
-        />
+        <SummaryCell label="Port" value={device?.usbPort || 'N/A'} tone="text-accent-warning" />
         <SummaryCell label="Payload" value={`${bytes.length.toLocaleString()} bytes`} tone="text-accent-secondary" />
         <SummaryCell label="Firmware" value={hexByte(info?.softwareRevision ?? u8(bytes, ME_OFFSETS.softwareRevision))} tone="text-accent-data" />
         <SummaryCell label="Product ID" value={hexByte(info?.productId ?? u8(bytes, ME_OFFSETS.productId))} tone="text-accent-success" />

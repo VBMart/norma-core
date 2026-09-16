@@ -146,7 +146,6 @@ name = "arduino-nicla-sense-me"
 version = "0.1.0-beta.11"
 dependencies = [
  "bytes",
- "i2c-async",
  "log",
  "normfs",
  "prost",

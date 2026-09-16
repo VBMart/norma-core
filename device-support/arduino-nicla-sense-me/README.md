@@ -1,19 +1,12 @@
 # Nicla Sense ME station firmware
 
 Exposes all BHY2 sensor outputs of an Arduino Nicla Sense ME as a 168-byte
-register map for the norma-core station `arduino-nicla-sense-me` driver, over
-two transports:
+register map for the norma-core station `arduino-nicla-sense-me` driver over
+USB serial: plug the board into the X8 over USB and the firmware streams a
+snapshot every 10 ms (~100 Hz); see [USB serial transport](#usb-serial-transport).
+The station autodetects every attached board and writes each one to its own
+queue named after the board's serial number (register 0x0E).
 
-- **I2C** (address `0x22`): wire the board to the Portenta X8 I2C bus via the
-  ESLOV connector or the castellated I2C pins. The driver polls at the
-  configured `poll-interval` (default 1 s).
-- **USB serial**: plug the board into the X8 over USB. The firmware streams a
-  snapshot every 10 ms (~100 Hz); see [USB serial transport](#usb-serial-transport).
-
-I2C protocol: write one byte to set the register pointer; subsequent reads
-return sequential bytes. Writing pointer `0x00` latches a consistent snapshot
-of all values — the station driver reads the full 168-byte map in 32-byte
-chunks and always starts at `0x00`, so every dump is internally consistent.
 The `sample counter` register (0x01) increments per firmware refresh while
 BHY2 is running.
 
@@ -64,7 +57,7 @@ length byte `0xA8`, the 168-byte register image (latched, internally consistent)
 and a trailing CRC8 (poly 0x07, init 0x00) over the 168-byte payload.
 While streaming is active the command is ignored: the pushed frame is the reply.
 
-Used by the probe/bench examples; the station driver uses streaming instead.
+Kept for manual probing; the station driver uses streaming instead.
 
 ### Commands 0x02 / 0x03: Streaming
 
@@ -77,8 +70,7 @@ active. Unknown command bytes are ignored.
 
 Hosts should send `0x03` when they open the port (a previous host may have
 left the board streaming) and scan for the magic rather than assume a
-frame starts at the first byte; the station driver and the examples do
-both. Frames whose length or CRC fail are discarded and the scan resumes at
+frame starts at the first byte; the station driver does both. Frames whose length or CRC fail are discarded and the scan resumes at
 the next byte.
 
 ## Flashing
@@ -115,37 +107,28 @@ reset button to enter the bootloader (the LED pulses) and retry the upload.
 
 ## Verifying
 
-Over I2C from the X8, with the board wired to bus 2 (adjust as needed):
+Start the station with the driver enabled and the board plugged in. The
+log reports the serial, firmware revision (expect 5) and the queue the board
+streams into:
 
-```bash
-i2cdetect -y 2                          # expect a device at 0x22
-i2ctransfer -y 2 w1@0x22 0x0c r2        # expect: firmware revision, then 0x4d (product id)
+```
+Arduino Nicla Sense ME <serial> (firmware rev 5) on /dev/ttyACM0 -> .../arduino-nicla-sense-me/<serial>/rx
 ```
 
-Over USB from any host with the board plugged in (the driver crate ships
-diagnostics as cargo examples):
-
-```bash
-cargo run -p arduino-nicla-sense-me --example usb_probe          # one dump: product id, status, environment
-cargo run -p arduino-nicla-sense-me --example stream_bench       # 10 s of streaming: frame rate, CRC failures
-cargo run -p arduino-nicla-sense-me --example poll_bench         # back-to-back 0x01 dumps: round-trip latency
-cargo run -p arduino-nicla-sense-me --example orientation_probe  # quaternion vs euler vs accel-implied attitude
-cargo run -p arduino-nicla-sense-me --example serial_monitor     # raw port bytes for 15 s (boot markers, fault dumps)
-```
+The RGB LED glows red while the board is streaming to the station.
 
 ## Station configuration
 
 ```yaml
 drivers:
   arduino-nicla-sense-me:
-    enabled: true
-    poll-interval: 1s               # driver-wide I2C poll interval; USB boards stream and ignore it
-    boards:
-      - id: nicla-usb
-        bus-type: usb               # autodetected by USB vid/pid 2341:0060
-        # usb-port: /dev/ttyACM0    # pin a port; required to tell multiple USB boards apart
-      - id: imu-front
-        bus-type: i2c               # the default
-        i2c-bus: 2
-        poll-interval: 100ms        # per-board override
+    enabled: true                   # autodetects every board by USB vid/pid 2341:0060
 ```
+
+There is no per-board configuration. Boards are discovered by re-enumerating
+serial ports every 500 ms, so plugging one in (or back in) is picked up
+automatically. Each board streams into `arduino-nicla-sense-me/<serial>/rx`,
+where `<serial>` is the lower-case hex of its six-byte serial number, so a
+board keeps the same queue across re-plugs and port renames. A board writes
+one 168-byte snapshot every 10 ms, roughly 2.3 GB/day of queue data; plan
+normfs retention accordingly.

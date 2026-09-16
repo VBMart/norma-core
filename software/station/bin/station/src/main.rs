@@ -408,49 +408,9 @@ impl Station {
         #[cfg(feature = "arduino")]
         if let Some(arduino_nicla_sense_me_config) = &self.config.drivers.arduino_nicla_sense_me {
             if arduino_nicla_sense_me_config.enabled {
-                use station_iface::config::ArduinoNiclaSenseMeBusType;
-
-                let boards = arduino_nicla_sense_me_config
-                    .boards
-                    .iter()
-                    .filter_map(|board| match board.bus_type {
-                        ArduinoNiclaSenseMeBusType::I2c => match board.i2c_bus {
-                            Some(i2c_bus) => Some(arduino_nicla_sense_me::ArduinoNiclaSenseMeBoardConfig {
-                                id: board.id.clone(),
-                                transport: arduino_nicla_sense_me::ArduinoNiclaSenseMeTransport::I2c {
-                                    i2c_bus,
-                                },
-                                poll_interval: board.poll_interval,
-                            }),
-                            None => {
-                                log::error!(
-                                    "Arduino Nicla Sense ME board {:?} has bus-type i2c but no i2c-bus; skipping",
-                                    board.id
-                                );
-                                None
-                            }
-                        },
-                        ArduinoNiclaSenseMeBusType::Usb => {
-                            Some(arduino_nicla_sense_me::ArduinoNiclaSenseMeBoardConfig {
-                                id: board.id.clone(),
-                                transport: arduino_nicla_sense_me::ArduinoNiclaSenseMeTransport::Usb {
-                                    usb_port: board.usb_port.clone(),
-                                },
-                                poll_interval: board.poll_interval,
-                            })
-                        }
-                    })
-                    .collect();
-
-                let config = arduino_nicla_sense_me::ArduinoNiclaSenseMeDriverConfig {
-                    poll_interval: arduino_nicla_sense_me_config.poll_interval,
-                    boards,
-                };
-
                 if let Err(error) = arduino_nicla_sense_me::start_arduino_nicla_sense_me_driver(
                     self.normfs.clone(),
                     self.engine.clone(),
-                    config,
                 )
                 .await
                 {

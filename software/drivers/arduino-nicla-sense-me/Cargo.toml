@@ -6,7 +6,6 @@ edition = "2024"
 [dependencies]
 prost = { workspace = true }
 bytes = { workspace = true }
-i2c-async = { path = "../../../shared/i2c-async" }
 log = { workspace = true }
 normfs = { workspace = true }
 station_iface = { path = "../../station/shared/station-iface" }

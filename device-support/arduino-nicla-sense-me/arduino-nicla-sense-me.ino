@@ -1,28 +1,20 @@
 /*
- * Nicla Sense ME → register-map peripheral for norma-core station.
+ * Nicla Sense ME → register-map sensor for norma-core station.
  *
  * Exposes all BHY2 sensor outputs as a 168-byte little-endian register map.
  * The map layout is the contract shared with
  * software/drivers/arduino-nicla-sense-me and the station-viewer; see
- * README.md in this directory. Two transports serve the same image:
- *  - I2C peripheral at address 0x22 (ESLOV / external I2C). A 1-byte write
- *    sets the read pointer; reads return sequential bytes. Writing pointer
- *    0x00 synchronously latches a consistent snapshot (inside the I2C
- *    receive handler) that all subsequent reads are served from, so a
- *    chunked full-map read never tears.
- *  - USB CDC serial: CRC8-framed snapshots, either one per 0x01 request or
- *    streamed at the 10 ms tick rate after 0x02 (see the serial protocol
- *    constants below).
+ * README.md in this directory. The image is served over USB CDC serial as
+ * CRC8-framed snapshots, either one per 0x01 request or streamed at the
+ * 10 ms tick rate after 0x02 (see the serial protocol constants below).
  */
 
 #include "Arduino_BHY2.h"
 #include "Nicla_System.h"
-#include "Wire.h"
 #include "nrf.h"
 
-constexpr uint8_t I2C_ADDRESS = 0x22;
 constexpr size_t REG_MAP_SIZE = 0xA8;
-constexpr uint8_t SOFTWARE_REVISION = 4;
+constexpr uint8_t SOFTWARE_REVISION = 5;
 constexpr uint8_t PRODUCT_ID = 0x4D; // 'M'
 
 // Register offsets (must match the station driver + viewer).
@@ -114,10 +106,9 @@ SensorBSEC bsec(SENSOR_ID_BSEC);
 Sensor stepCounter(SENSOR_ID_STC);
 SensorActivity activity(SENSOR_ID_AR);
 
-static uint8_t liveMap[REG_MAP_SIZE];    // staging: written only by loop()
-static uint8_t stableMap[REG_MAP_SIZE];  // last complete snapshot, committed under interrupt guard
-static uint8_t latchedMap[REG_MAP_SIZE]; // frozen copy served to the host during a dump
-static volatile uint8_t regPointer = 0;
+// Register image; written only by loop(), which also sends it, so every
+// frame is a complete snapshot of one tick.
+static uint8_t regMap[REG_MAP_SIZE];
 static bool bhy2Ok = false;
 
 // Streaming deadline: 0 = off, otherwise millis() time when the stream
@@ -129,9 +120,7 @@ static void sendDumpFrame() {
   frame[0] = SERIAL_MAGIC0;
   frame[1] = SERIAL_MAGIC1;
   frame[2] = (uint8_t)REG_MAP_SIZE;
-  // stableMap is only ever written by loop() (this same thread), so this
-  // copy is always a complete snapshot; no interrupt guard needed.
-  memcpy(frame + 3, stableMap, REG_MAP_SIZE);
+  memcpy(frame + 3, regMap, REG_MAP_SIZE);
   frame[3 + REG_MAP_SIZE] = crc8(frame + 3, REG_MAP_SIZE);
   Serial.write(frame, sizeof(frame));
 }
@@ -212,54 +201,21 @@ static void gravityFromQuat(float w, float x, float y, float z,
   gz = w * w - x * x - y * y + z * z;
 }
 
-void onI2CReceive(int count) {
-  if (count >= 1) {
-    regPointer = Wire.read();
-    while (Wire.available()) {
-      Wire.read(); // register writes are not supported; drain
-    }
-    if (regPointer == 0x00) {
-      // Snapshot synchronously: this is a 168-byte memcpy (microseconds on
-      // the nRF52), well within I2C clock stretching, and guarantees the
-      // latch cannot land mid-dump between the host's chunked reads.
-      // stableMap only ever holds complete snapshots (loop() commits it
-      // under an interrupt guard), so this latch can never observe a
-      // half-written update even when this ISR preempts loop().
-      memcpy(latchedMap, stableMap, sizeof(latchedMap));
-    }
-  }
-}
-
-void onI2CRequest() {
-  // The host reads in chunks of <=32 bytes, re-sending the register offset
-  // before each chunk, so serving one bounded chunk per request is enough.
-  uint8_t chunk[32];
-  size_t start = regPointer;
-  size_t available = start < REG_MAP_SIZE ? REG_MAP_SIZE - start : 0;
-  size_t len = available < sizeof(chunk) ? available : sizeof(chunk);
-  if (len == 0) {
-    uint8_t zero = 0;
-    Wire.write(&zero, 1);
-    return;
-  }
-  memcpy(chunk, latchedMap + start, len);
-  Wire.write(chunk, len);
-}
-
 void setup() {
-  // RGB LED (IS31FL3194 on the internal I2C bus, separate from the ESLOV
-  // peripheral bus): red = USB streaming active, off = idle.
+  // RGB LED (IS31FL3194 on the internal I2C bus): red = USB streaming
+  // active, off = idle.
   nicla::begin();
   nicla::leds.begin();
   nicla::leds.setColor(0, 0, 0);
 
-  memset(liveMap, 0, sizeof(liveMap));
+  memset(regMap, 0, sizeof(regMap));
 
-  liveMap[REG_SOFTWARE_REVISION] = SOFTWARE_REVISION;
-  liveMap[REG_PRODUCT_ID] = PRODUCT_ID;
-  // 6-byte serial from the nRF52 factory device id.
+  regMap[REG_SOFTWARE_REVISION] = SOFTWARE_REVISION;
+  regMap[REG_PRODUCT_ID] = PRODUCT_ID;
+  // 6-byte serial from the nRF52 factory device id. The station names the
+  // board's queue after it, so it must be stable across reboots (it is).
   uint32_t serialWords[2] = { NRF_FICR->DEVICEID[0], NRF_FICR->DEVICEID[1] };
-  memcpy(&liveMap[REG_SERIAL], serialWords, 6);
+  memcpy(&regMap[REG_SERIAL], serialWords, 6);
 
   bhy2Ok = BHY2.begin(NICLA_STANDALONE);
   if (bhy2Ok) {
@@ -280,19 +236,12 @@ void setup() {
     activity.begin(1);
   }
 
-  memcpy(stableMap, liveMap, sizeof(stableMap));
-  memcpy(latchedMap, stableMap, sizeof(latchedMap));
-
   // Serial for the USB transport. On the Nicla the USB port is a SAMD11
   // serial-to-USB BRIDGE, so this is a real UART baud rate and directly
   // limits throughput (115200 made a 172-byte dump take ~15 ms and capped
   // polling at ~50 Hz). 921600 moves a dump in ~2 ms. Must match the
   // station driver's SERIAL_BAUD. Never wait for !Serial (headless).
   Serial.begin(921600);
-
-  Wire.begin(I2C_ADDRESS);
-  Wire.onReceive(onI2CReceive);
-  Wire.onRequest(onI2CRequest);
 }
 
 void loop() {
@@ -300,9 +249,9 @@ void loop() {
     BHY2.update();
   }
 
-  writeVec3(liveMap, REG_ACCEL, accel, ACCEL_LSB_PER_G);
-  writeVec3(liveMap, REG_GYRO, gyro, GYRO_LSB_PER_DPS);
-  writeVec3(liveMap, REG_MAG, mag, MAG_LSB_PER_UT);
+  writeVec3(regMap, REG_ACCEL, accel, ACCEL_LSB_PER_G);
+  writeVec3(regMap, REG_GYRO, gyro, GYRO_LSB_PER_DPS);
+  writeVec3(regMap, REG_MAG, mag, MAG_LSB_PER_UT);
 
   // SensorQuaternion (Arduino_BHY2/src/sensors/SensorQuaternion.h) already
   // scales x/y/z/w/accuracy internally (constructor factor 0.000061035 ==
@@ -312,11 +261,11 @@ void loop() {
   float qx = quat.x();
   float qy = quat.y();
   float qz = quat.z();
-  writeF32(liveMap, REG_QUAT, qw);
-  writeF32(liveMap, REG_QUAT + 4, qx);
-  writeF32(liveMap, REG_QUAT + 8, qy);
-  writeF32(liveMap, REG_QUAT + 12, qz);
-  writeF32(liveMap, REG_QUAT + 16, quat.accuracy());
+  writeF32(regMap, REG_QUAT, qw);
+  writeF32(regMap, REG_QUAT + 4, qx);
+  writeF32(regMap, REG_QUAT + 8, qy);
+  writeF32(regMap, REG_QUAT + 12, qz);
+  writeF32(regMap, REG_QUAT + 16, quat.accuracy());
 
   // Derived values (see the 11-subscription note): euler from the
   // quaternion, gravity as the quaternion-rotated 1g vector, linear
@@ -343,44 +292,37 @@ void loop() {
     ly = accel.y() / ACCEL_LSB_PER_G - gy;
     lz = accel.z() / ACCEL_LSB_PER_G - gz;
   }
-  writeF32(liveMap, REG_EULER, heading);
-  writeF32(liveMap, REG_EULER + 4, pitch);
-  writeF32(liveMap, REG_EULER + 8, roll);
-  writeF32(liveMap, REG_GRAVITY, gx);
-  writeF32(liveMap, REG_GRAVITY + 4, gy);
-  writeF32(liveMap, REG_GRAVITY + 8, gz);
-  writeF32(liveMap, REG_LACC, lx);
-  writeF32(liveMap, REG_LACC + 4, ly);
-  writeF32(liveMap, REG_LACC + 8, lz);
+  writeF32(regMap, REG_EULER, heading);
+  writeF32(regMap, REG_EULER + 4, pitch);
+  writeF32(regMap, REG_EULER + 8, roll);
+  writeF32(regMap, REG_GRAVITY, gx);
+  writeF32(regMap, REG_GRAVITY + 4, gy);
+  writeF32(regMap, REG_GRAVITY + 8, gz);
+  writeF32(regMap, REG_LACC, lx);
+  writeF32(regMap, REG_LACC + 4, ly);
+  writeF32(regMap, REG_LACC + 8, lz);
 
-  writeF32(liveMap, REG_TEMPERATURE, temperature.value());
-  writeF32(liveMap, REG_HUMIDITY, humidity.value());
-  writeF32(liveMap, REG_PRESSURE, pressure.value());
-  writeF32(liveMap, REG_GAS, gas.value());
+  writeF32(regMap, REG_TEMPERATURE, temperature.value());
+  writeF32(regMap, REG_HUMIDITY, humidity.value());
+  writeF32(regMap, REG_PRESSURE, pressure.value());
+  writeF32(regMap, REG_GAS, gas.value());
 
-  writeF32(liveMap, REG_IAQ, (float)bsec.iaq());
-  writeF32(liveMap, REG_IAQ_STATIC, (float)bsec.iaq_s());
-  writeF32(liveMap, REG_ECO2, (float)bsec.co2_eq());
-  writeF32(liveMap, REG_BVOC, bsec.b_voc_eq());
-  writeF32(liveMap, REG_BSEC_ACCURACY, (float)bsec.accuracy());
-  writeF32(liveMap, REG_COMP_TEMPERATURE, bsec.comp_t());
-  writeF32(liveMap, REG_COMP_HUMIDITY, bsec.comp_h());
+  writeF32(regMap, REG_IAQ, (float)bsec.iaq());
+  writeF32(regMap, REG_IAQ_STATIC, (float)bsec.iaq_s());
+  writeF32(regMap, REG_ECO2, (float)bsec.co2_eq());
+  writeF32(regMap, REG_BVOC, bsec.b_voc_eq());
+  writeF32(regMap, REG_BSEC_ACCURACY, (float)bsec.accuracy());
+  writeF32(regMap, REG_COMP_TEMPERATURE, bsec.comp_t());
+  writeF32(regMap, REG_COMP_HUMIDITY, bsec.comp_h());
 
-  writeU32(liveMap, REG_STEP_COUNT, (uint32_t)stepCounter.value());
-  writeU32(liveMap, REG_ACTIVITY, (uint32_t)activity.value());
+  writeU32(regMap, REG_STEP_COUNT, (uint32_t)stepCounter.value());
+  writeU32(regMap, REG_ACTIVITY, (uint32_t)activity.value());
 
-  liveMap[REG_STATUS] = (bhy2Ok ? 0x01 : 0x00) | (bsec.accuracy() > 0 ? 0x02 : 0x00) |
+  regMap[REG_STATUS] = (bhy2Ok ? 0x01 : 0x00) | (bsec.accuracy() > 0 ? 0x02 : 0x00) |
                         (quatValid ? 0x04 : 0x00);
   if (bhy2Ok) {
-    liveMap[REG_SAMPLE_COUNTER] = liveMap[REG_SAMPLE_COUNTER] + 1;
+    regMap[REG_SAMPLE_COUNTER] = regMap[REG_SAMPLE_COUNTER] + 1;
   }
-
-  // Commit the fully-written staging map as the new stable snapshot. The
-  // interrupt guard keeps the I2C receive handler from latching while the
-  // copy is in flight, so stableMap is always internally consistent.
-  noInterrupts();
-  memcpy(stableMap, liveMap, sizeof(stableMap));
-  interrupts();
 
   serviceSerialCommands();
   const bool streaming = streamActive();

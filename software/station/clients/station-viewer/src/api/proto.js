@@ -39757,9 +39757,6 @@ export const arduino_nicla_sense_me = $root.arduino_nicla_sense_me = (() => {
          * @memberof arduino_nicla_sense_me
          * @interface IArduinoNiclaSenseMeDevice
          * @property {string|null} [id] ArduinoNiclaSenseMeDevice id
-         * @property {number|null} [i2cBus] ArduinoNiclaSenseMeDevice i2cBus
-         * @property {number|null} [i2cAddress] ArduinoNiclaSenseMeDevice i2cAddress
-         * @property {string|null} [transport] ArduinoNiclaSenseMeDevice transport
          * @property {string|null} [usbPort] ArduinoNiclaSenseMeDevice usbPort
          * @property {arduino_nicla_sense_me.IArduinoNiclaSenseMeDeviceInfo|null} [info] ArduinoNiclaSenseMeDevice info
          */
@@ -39786,30 +39783,6 @@ export const arduino_nicla_sense_me = $root.arduino_nicla_sense_me = (() => {
          * @instance
          */
         ArduinoNiclaSenseMeDevice.prototype.id = "";
-
-        /**
-         * ArduinoNiclaSenseMeDevice i2cBus.
-         * @member {number} i2cBus
-         * @memberof arduino_nicla_sense_me.ArduinoNiclaSenseMeDevice
-         * @instance
-         */
-        ArduinoNiclaSenseMeDevice.prototype.i2cBus = 0;
-
-        /**
-         * ArduinoNiclaSenseMeDevice i2cAddress.
-         * @member {number} i2cAddress
-         * @memberof arduino_nicla_sense_me.ArduinoNiclaSenseMeDevice
-         * @instance
-         */
-        ArduinoNiclaSenseMeDevice.prototype.i2cAddress = 0;
-
-        /**
-         * ArduinoNiclaSenseMeDevice transport.
-         * @member {string} transport
-         * @memberof arduino_nicla_sense_me.ArduinoNiclaSenseMeDevice
-         * @instance
-         */
-        ArduinoNiclaSenseMeDevice.prototype.transport = "";
 
         /**
          * ArduinoNiclaSenseMeDevice usbPort.
@@ -39853,12 +39826,6 @@ export const arduino_nicla_sense_me = $root.arduino_nicla_sense_me = (() => {
                 writer = $Writer.create();
             if (message.id != null && Object.hasOwnProperty.call(message, "id"))
                 writer.uint32(/* id 1, wireType 2 =*/10).string(message.id);
-            if (message.i2cBus != null && Object.hasOwnProperty.call(message, "i2cBus"))
-                writer.uint32(/* id 2, wireType 0 =*/16).uint32(message.i2cBus);
-            if (message.i2cAddress != null && Object.hasOwnProperty.call(message, "i2cAddress"))
-                writer.uint32(/* id 3, wireType 0 =*/24).uint32(message.i2cAddress);
-            if (message.transport != null && Object.hasOwnProperty.call(message, "transport"))
-                writer.uint32(/* id 4, wireType 2 =*/34).string(message.transport);
             if (message.usbPort != null && Object.hasOwnProperty.call(message, "usbPort"))
                 writer.uint32(/* id 5, wireType 2 =*/42).string(message.usbPort);
             if (message.info != null && Object.hasOwnProperty.call(message, "info"))
@@ -39905,18 +39872,6 @@ export const arduino_nicla_sense_me = $root.arduino_nicla_sense_me = (() => {
                 switch (tag >>> 3) {
                 case 1: {
                         message.id = reader.string();
-                        break;
-                    }
-                case 2: {
-                        message.i2cBus = reader.uint32();
-                        break;
-                    }
-                case 3: {
-                        message.i2cAddress = reader.uint32();
-                        break;
-                    }
-                case 4: {
-                        message.transport = reader.string();
                         break;
                     }
                 case 5: {
@@ -39969,15 +39924,6 @@ export const arduino_nicla_sense_me = $root.arduino_nicla_sense_me = (() => {
             if (message.id != null && message.hasOwnProperty("id"))
                 if (!$util.isString(message.id))
                     return "id: string expected";
-            if (message.i2cBus != null && message.hasOwnProperty("i2cBus"))
-                if (!$util.isInteger(message.i2cBus))
-                    return "i2cBus: integer expected";
-            if (message.i2cAddress != null && message.hasOwnProperty("i2cAddress"))
-                if (!$util.isInteger(message.i2cAddress))
-                    return "i2cAddress: integer expected";
-            if (message.transport != null && message.hasOwnProperty("transport"))
-                if (!$util.isString(message.transport))
-                    return "transport: string expected";
             if (message.usbPort != null && message.hasOwnProperty("usbPort"))
                 if (!$util.isString(message.usbPort))
                     return "usbPort: string expected";
@@ -40007,12 +39953,6 @@ export const arduino_nicla_sense_me = $root.arduino_nicla_sense_me = (() => {
             let message = new $root.arduino_nicla_sense_me.ArduinoNiclaSenseMeDevice();
             if (object.id != null)
                 message.id = String(object.id);
-            if (object.i2cBus != null)
-                message.i2cBus = object.i2cBus >>> 0;
-            if (object.i2cAddress != null)
-                message.i2cAddress = object.i2cAddress >>> 0;
-            if (object.transport != null)
-                message.transport = String(object.transport);
             if (object.usbPort != null)
                 message.usbPort = String(object.usbPort);
             if (object.info != null) {
@@ -40038,20 +39978,11 @@ export const arduino_nicla_sense_me = $root.arduino_nicla_sense_me = (() => {
             let object = {};
             if (options.defaults) {
                 object.id = "";
-                object.i2cBus = 0;
-                object.i2cAddress = 0;
-                object.transport = "";
                 object.usbPort = "";
                 object.info = null;
             }
             if (message.id != null && message.hasOwnProperty("id"))
                 object.id = message.id;
-            if (message.i2cBus != null && message.hasOwnProperty("i2cBus"))
-                object.i2cBus = message.i2cBus;
-            if (message.i2cAddress != null && message.hasOwnProperty("i2cAddress"))
-                object.i2cAddress = message.i2cAddress;
-            if (message.transport != null && message.hasOwnProperty("transport"))
-                object.transport = message.transport;
             if (message.usbPort != null && message.hasOwnProperty("usbPort"))
                 object.usbPort = message.usbPort;
             if (message.info != null && message.hasOwnProperty("info"))

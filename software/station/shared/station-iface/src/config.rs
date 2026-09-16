@@ -457,71 +457,13 @@ impl Default for ArduinoNiclaSenseEnvConfig {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+/// Boards are not configured: the driver autodetects every Nicla Sense ME
+/// on USB (vid 2341 pid 0060) and streams each into its own queue named by
+/// the board's serial number.
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Default)]
 pub struct ArduinoNiclaSenseMeConfig {
     #[serde(default)]
     pub enabled: bool,
-
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub boards: Vec<ArduinoNiclaSenseMeBoardConfig>,
-
-    #[serde(
-        default = "default_arduino_nicla_sense_me_poll_interval",
-        rename = "poll-interval",
-        with = "humantime_serde"
-    )]
-    pub poll_interval: std::time::Duration,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Default)]
-#[serde(rename_all = "lowercase")]
-pub enum ArduinoNiclaSenseMeBusType {
-    #[default]
-    I2c,
-    Usb,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct ArduinoNiclaSenseMeBoardConfig {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub id: Option<String>,
-
-    #[serde(rename = "bus-type", default)]
-    pub bus_type: ArduinoNiclaSenseMeBusType,
-
-    #[serde(rename = "i2c-bus", default, skip_serializing_if = "Option::is_none")]
-    pub i2c_bus: Option<u32>,
-
-    /// Serial port path for bus-type usb (e.g. "/dev/ttyACM0"). Optional:
-    /// when omitted the driver autodetects by USB vid/pid. Each additional
-    /// USB board needs a distinct pinned port.
-    #[serde(rename = "usb-port", default, skip_serializing_if = "Option::is_none")]
-    pub usb_port: Option<String>,
-
-    /// Per-board override of the driver-wide poll interval. Applies to
-    /// i2c boards; usb boards stream at the firmware push rate (~100 Hz)
-    /// and ignore it.
-    #[serde(
-        rename = "poll-interval",
-        default,
-        with = "humantime_serde::option",
-        skip_serializing_if = "Option::is_none"
-    )]
-    pub poll_interval: Option<std::time::Duration>,
-}
-
-fn default_arduino_nicla_sense_me_poll_interval() -> std::time::Duration {
-    std::time::Duration::from_secs(1)
-}
-
-impl Default for ArduinoNiclaSenseMeConfig {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            boards: Vec::new(),
-            poll_interval: default_arduino_nicla_sense_me_poll_interval(),
-        }
-    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -855,58 +797,25 @@ mod arduino_nicla_sense_me_tests {
 system-info: false
 arduino-nicla-sense-me:
   enabled: true
-  poll-interval: 500ms
-  boards:
-    - id: imu-front
-      i2c-bus: 2
 "#;
         let drivers: Drivers = serde_yaml::from_str(yaml).expect("drivers block parses");
         let me = drivers
             .arduino_nicla_sense_me
             .expect("nicla sense me block present");
         assert!(me.enabled);
-        assert_eq!(me.poll_interval, std::time::Duration::from_millis(500));
-        assert_eq!(me.boards.len(), 1);
-        assert_eq!(me.boards[0].id.as_deref(), Some("imu-front"));
-        assert_eq!(me.boards[0].bus_type, ArduinoNiclaSenseMeBusType::I2c);
-        assert_eq!(me.boards[0].i2c_bus, Some(2));
+        assert_eq!(me, ArduinoNiclaSenseMeConfig { enabled: true });
     }
 
     #[test]
-    fn parses_arduino_nicla_sense_me_usb_board() {
+    fn arduino_nicla_sense_me_defaults_to_disabled() {
         let yaml = r#"
 system-info: false
-arduino-nicla-sense-me:
-  enabled: true
-  boards:
-    - id: nicla-usb
-      bus-type: usb
-      usb-port: /dev/ttyACM7
-      poll-interval: 10ms
-    - bus-type: i2c
-      i2c-bus: 3
+arduino-nicla-sense-me: {}
 "#;
         let drivers: Drivers = serde_yaml::from_str(yaml).expect("drivers block parses");
-        let me = drivers.arduino_nicla_sense_me.expect("block present");
-        assert_eq!(me.boards.len(), 2);
-        assert_eq!(me.boards[0].bus_type, ArduinoNiclaSenseMeBusType::Usb);
-        assert_eq!(me.boards[0].i2c_bus, None);
-        assert_eq!(me.boards[0].usb_port.as_deref(), Some("/dev/ttyACM7"));
-        assert_eq!(me.boards[1].usb_port, None);
         assert_eq!(
-            me.boards[0].poll_interval,
-            Some(std::time::Duration::from_millis(10))
+            drivers.arduino_nicla_sense_me,
+            Some(ArduinoNiclaSenseMeConfig { enabled: false })
         );
-        assert_eq!(me.boards[1].poll_interval, None);
-        assert_eq!(me.boards[1].bus_type, ArduinoNiclaSenseMeBusType::I2c);
-        assert_eq!(me.boards[1].i2c_bus, Some(3));
-    }
-
-    #[test]
-    fn arduino_nicla_sense_me_defaults() {
-        let me = ArduinoNiclaSenseMeConfig::default();
-        assert!(!me.enabled);
-        assert!(me.boards.is_empty());
-        assert_eq!(me.poll_interval, std::time::Duration::from_secs(1));
     }
 }

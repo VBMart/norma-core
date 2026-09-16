@@ -283,7 +283,7 @@ function HistoryElement({ element, index, dataQueueType, dataQueueId }: HistoryE
               </span>
               {arduinoNiclaSenseMeData.device && (
                 <span className="text-accent-info">
-                  {arduinoNiclaSenseMeData.device.id || (arduinoNiclaSenseMeData.device.transport === 'usb' ? `usb ${arduinoNiclaSenseMeData.device.usbPort || ''}`.trim() : `i2c-${arduinoNiclaSenseMeData.device.i2cBus}`)}
+                  {arduinoNiclaSenseMeData.device.id || arduinoNiclaSenseMeData.device.usbPort || 'N/A'}
                 </span>
               )}
               {arduinoNiclaSenseMeTemperature && (

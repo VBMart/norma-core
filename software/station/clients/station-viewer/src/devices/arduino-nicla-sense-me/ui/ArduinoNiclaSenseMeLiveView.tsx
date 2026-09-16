@@ -24,24 +24,11 @@ function formatMeasured(value: number | null, unit: string, decimals = 2): strin
   return `${value.toFixed(decimals)} ${unit}`;
 }
 
-function hexByte(value: number | null | undefined): string {
-  if (value === undefined || value === null) {
-    return 'N/A';
-  }
-  return `0x${value.toString(16).toUpperCase().padStart(2, '0')}`;
-}
-
 function deviceLabel(data: arduino_nicla_sense_me.IRxEnvelope): string {
   if (!data.device) {
     return 'N/A';
   }
-  if (data.device.id) {
-    return data.device.id;
-  }
-  if (data.device.transport === 'usb') {
-    return `usb ${data.device.usbPort || ''}`.trim();
-  }
-  return `bus ${data.device.i2cBus ?? 'N/A'} / ${hexByte(data.device.i2cAddress)}`;
+  return data.device.id || data.device.usbPort || 'N/A';
 }
 
 function CompassDial({ headingDeg }: { headingDeg: number | null }) {
