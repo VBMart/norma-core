@@ -75,31 +75,34 @@ the next byte.
 
 ## Flashing
 
-Flashing is done from a workstation over USB (not from the X8).
+Flashing is done from a workstation over USB (not from the X8). Run the
+commands below from this directory (`device-support/arduino-nicla-sense-me`).
 
 ### macOS
 
 ```bash
+cd device-support/arduino-nicla-sense-me
 brew install arduino-cli
 arduino-cli core update-index
 arduino-cli core install arduino:mbed_nicla
 arduino-cli lib install Arduino_BHY2 ArduinoBLE
 arduino-cli board list                  # plug the Nicla in via USB; note the port, e.g. /dev/cu.usbmodem14101
-arduino-cli compile --fqbn arduino:mbed_nicla:nicla_sense device-support/arduino-nicla-sense-me
-arduino-cli upload -p /dev/cu.usbmodem14101 --fqbn arduino:mbed_nicla:nicla_sense device-support/arduino-nicla-sense-me
+arduino-cli compile --fqbn arduino:mbed_nicla:nicla_sense .
+arduino-cli upload -p /dev/cu.usbmodem14101 --fqbn arduino:mbed_nicla:nicla_sense .
 ```
 
 ### Linux
 
 ```bash
+cd device-support/arduino-nicla-sense-me
 curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | sh   # installs to ./bin
 export PATH="$PWD/bin:$PATH"
 arduino-cli core update-index
 arduino-cli core install arduino:mbed_nicla   # also installs udev rules; re-plug the board afterwards
 arduino-cli lib install Arduino_BHY2 ArduinoBLE
 arduino-cli board list                  # note the port, e.g. /dev/ttyACM0
-arduino-cli compile --fqbn arduino:mbed_nicla:nicla_sense device-support/arduino-nicla-sense-me
-arduino-cli upload -p /dev/ttyACM0 --fqbn arduino:mbed_nicla:nicla_sense device-support/arduino-nicla-sense-me
+arduino-cli compile --fqbn arduino:mbed_nicla:nicla_sense .
+arduino-cli upload -p /dev/ttyACM0 --fqbn arduino:mbed_nicla:nicla_sense .
 ```
 
 If the upload fails with "port busy" or the board isn't listed, double-tap the
