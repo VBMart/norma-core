@@ -44,7 +44,7 @@ A fully 3D-printed robotic desk lamp with 5 ST3215 bus servos: yaw in the base, 
 |---|---|---|
 | Electronics | Waveshare Bus Servo Adapter **in the base**, USB cable to your computer | ESP32-CAM + Waveshare Bus Servo Adapter **in the head** |
 | Light | none | WS2812B ring in the shade (~48 LEDs) |
-| Control | from the PC over USB: any ST3215 / Feetech bus library, the NormaCore station, or the Python tools in [`firmware/tools`](firmware/tools) | browser page over WiFi (sliders, actions, light effects, program editor), REST API, WebSocket |
+| Control | from the PC over USB: any ST3215 / Feetech bus library, the NormaCore station | browser page over WiFi (sliders, actions, light effects, program editor), REST API, WebSocket |
 | Head plate to print | none | `plate_espcam_ws_x1.stl` |
 | Window disc | `window_disc_x1_PETG.stl` | `window_disc_x1_PETG.stl` (or the `_cam` disc if you want the lens exposed) |
 
@@ -269,12 +269,6 @@ Boot never moves the lamp: the firmware only reads the servos and leaves torque 
 
 3. On the web page click **Set this pose as init…** and confirm with **Write offsets**. This writes the position correction into every servo's EEPROM, so this pose reads 2048 ticks on all five joints. It survives power off.
 4. Click **Torque on**. The lamp holds its pose and is ready for action: try the sliders with small moves first and check every joint runs the right way, then the actions.
-
-**Simple version:** do the same with the Python tool, with the arm held in the pose above:
-
-```
-python firmware/tools/center_servo.py 1 2 3 4 5
-```
 
 Redo this whenever you re-seat a horn.
 
