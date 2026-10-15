@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use bytes::{Bytes, BytesMut};
-use log::{error, warn};
+use log::{error, info, warn};
 use normfs::NormFS;
 use parking_lot::Mutex;
 use prost::Message;
@@ -10,7 +10,7 @@ use station_iface::{Backpressure, enqueue_with};
 use station_iface::{StationEngine, iface_proto::drivers::QueueDataType};
 
 use crate::{
-    codec::{KeyframePolicy, VideoCodec, VideoEncoder, Vp8Encoder},
+    codec::{self, KeyframePolicy, VideoCodec, VideoEncoder},
     converters::{self, FourCCFormat},
     usbvideo_proto::{
         frame::{self, FrameFormatKind, FrameStamp, FramesPack},
@@ -38,10 +38,13 @@ pub struct StateTracker<T: StationEngine> {
     /// Per camera, so cameras encode in parallel; the inner lock also keeps
     /// each camera's encode and enqueue order the same.
     encoders: Mutex<HashMap<String, Arc<Mutex<Option<CameraEncoder>>>>>,
+    /// H1 encode failures in a row per camera; at `H1_MAX_FAILURES` it stays on libvpx.
+    h1_failures: Mutex<HashMap<String, u32>>,
 }
 
 struct CameraEncoder {
     encoder: Box<dyn VideoEncoder>,
+    kind: &'static str,
     format_revision: u64,
     policy: KeyframePolicy,
     // The ET_CAPTURE_SESSION entry this session's frames name, and its file.
@@ -75,6 +78,7 @@ impl<T: StationEngine> StateTracker<T> {
             format_control: Mutex::new(FormatControlState::default()),
             camera_formats: Mutex::new(HashMap::new()),
             encoders: Mutex::new(HashMap::new()),
+            h1_failures: Mutex::new(HashMap::new()),
         }
     }
 
@@ -333,14 +337,26 @@ impl<T: StationEngine> StateTracker<T> {
                 || s.encoder.height() != height
         });
         if stale {
-            *state = match Vp8Encoder::new(width, height) {
-                Ok(encoder) => Some(CameraEncoder {
-                    encoder: Box::new(encoder),
-                    format_revision,
-                    policy: KeyframePolicy::new(self.config.keyframe_interval),
-                    session: None,
-                    chain_file: None,
-                }),
+            let hardware = self
+                .h1_failures
+                .lock()
+                .get(&camera.unique_id)
+                .is_none_or(|n| *n < H1_MAX_FAILURES);
+            *state = match codec::vp8_encoder(width, height, hardware) {
+                Ok((encoder, kind)) => {
+                    info!(
+                        "VP8 encoder for camera {} at {width}x{height}: {kind}",
+                        camera.unique_id
+                    );
+                    Some(CameraEncoder {
+                        encoder,
+                        kind,
+                        format_revision,
+                        policy: KeyframePolicy::new(self.config.keyframe_interval),
+                        session: None,
+                        chain_file: None,
+                    })
+                }
                 Err(e) => {
                     error!("VP8 encoder for camera {}: {}", camera.unique_id, e);
                     return;
@@ -366,6 +382,9 @@ impl<T: StationEngine> StateTracker<T> {
                 Some(encoded) => encoded,
                 None => match cam.encoder.encode(&rgb, force) {
                     Ok(p) if p.keyframe || (!force && cam.policy.keyframe().is_some()) => {
+                        if cam.kind == codec::H1 {
+                            self.h1_failures.lock().remove(&camera.unique_id);
+                        }
                         (p.keyframe, Bytes::from(p.data))
                     }
                     Ok(_) => {
@@ -378,6 +397,13 @@ impl<T: StationEngine> StateTracker<T> {
                     }
                     Err(e) => {
                         error!("VP8 encode for camera {}: {}", camera.unique_id, e);
+                        if cam.kind == codec::H1 {
+                            *self
+                                .h1_failures
+                                .lock()
+                                .entry(camera.unique_id.clone())
+                                .or_default() += 1;
+                        }
                         *state = None;
                         return;
                     }
@@ -535,6 +561,9 @@ impl<T: StationEngine> StateTracker<T> {
 
 /// What an envelope adds to a frame's bytes, generously.
 const FRAME_OVERHEAD: usize = 256;
+
+/// A one-off fault does not cost a camera the hardware encoder for the rest of the run.
+const H1_MAX_FAILURES: u32 = 3;
 
 /// VP8 halves chroma both ways, so an odd edge loses its last row or column.
 fn even_crop(width: u32, height: u32, rgb: &Bytes) -> (u32, u32, Bytes) {
