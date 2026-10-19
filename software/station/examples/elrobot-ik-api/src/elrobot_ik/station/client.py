@@ -123,6 +123,13 @@ class StationClient:
 
     async def read_tail(self, queue_id: str, n: int, timeout_s: float = 5.0) -> list[tuple[bytes, bytes]]:
         """The last `n` entries of a queue as (entry id, data), oldest first. Empty when the queue is empty."""
+        return await self._read(queue_id, normfs_pb2.OT_SHIFT_FROM_TAIL, n.to_bytes(8, "little"), n, timeout_s)
+
+    async def read_from(self, queue_id: str, first_id: bytes, n: int, timeout_s: float = 5.0) -> list[tuple[bytes, bytes]]:
+        """Up to `n` entries starting at entry id `first_id` (8 bytes, little-endian), oldest first."""
+        return await self._read(queue_id, normfs_pb2.OT_ABSOLUTE, first_id, n, timeout_s)
+
+    async def _read(self, queue_id: str, offset_type: int, offset_id: bytes, n: int, timeout_s: float) -> list[tuple[bytes, bytes]]:
         read_id = self._next_read_id
         self._next_read_id += 1
         entries: list[tuple[bytes, bytes]] = []
@@ -133,8 +140,8 @@ class StationClient:
         req.read.queue_id = queue_id
         req.read.step = 1
         req.read.limit = n
-        req.read.offset.id.raw = n.to_bytes(8, "little")
-        req.read.offset.type = normfs_pb2.OT_SHIFT_FROM_TAIL
+        req.read.offset.id.raw = offset_id
+        req.read.offset.type = offset_type
         result = await self._request(req, read_id, self._reads, fut, timeout_s, f"station did not finish reading {queue_id}")
         if result == normfs_pb2.ReadResponse.RR_QUEUE_NOT_FOUND:
             raise StationError("not_found", f"queue {queue_id} not found on station")

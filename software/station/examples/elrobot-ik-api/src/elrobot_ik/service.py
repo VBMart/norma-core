@@ -17,7 +17,20 @@ from elrobot_ik.kinematics.ik import IKResult, IKSolver
 from elrobot_ik.kinematics.model import ElrobotModel
 from elrobot_ik.kinematics.transforms import rotation_to_rpy
 from elrobot_ik.station.arms import ELROBOT_MOTOR_IDS, BusSnapshot, find_arm, role
-from elrobot_ik.station.cameras import INFERENCE_STATES_QUEUE, CameraFrame, CameraQueue, parse_camera_frame, parse_camera_queues
+from elrobot_ik.station.cameras import (
+    FF_JPEG,
+    FF_VP8,
+    INFERENCE_STATES_QUEUE,
+    MAX_CHAIN,
+    CameraEntry,
+    CameraFrame,
+    CameraQueue,
+    decode_vp8_chain,
+    entry_id,
+    entry_id_bytes,
+    parse_camera_entry,
+    parse_camera_queues,
+)
 from elrobot_ik.station.client import StationError
 from elrobot_ik.station.commands import drive_commands, goal_command, mirroring_stop_command, torque_command
 
@@ -216,8 +229,8 @@ class ArmService:
         self._camera_cache = (now, cams)
         return cams
 
-    async def _latest_frame(self, queue: str) -> CameraFrame | None:
-        """Latest JPEG frame of a camera queue, or None when its recent entries hold no frame."""
+    async def _latest_entry(self, queue: str) -> tuple[bytes, CameraEntry] | None:
+        """The newest frame entry of a camera queue as (entry id, entry), or None when its recent entries hold no frame."""
         for n in (1, 3):  # the newest entry is almost always a frame; look further only for device events
             try:
                 entries = await self.client.read_tail(queue, n)
@@ -225,21 +238,66 @@ class ArmService:
                 if e.code == "not_found":
                     return None
                 raise self._station_error(e) from e
-            for _, data in reversed(entries):
-                try:
-                    frame = parse_camera_frame(data)
-                except ValueError as e:
-                    raise ServiceError(415, "unsupported_codec", str(e)) from e
-                if frame is not None:
-                    return frame
+            for id_, data in reversed(entries):
+                if (entry := self._parse_entry(data)) is not None:
+                    return id_, entry
             if len(entries) < n:
                 return None
         return None
 
+    @staticmethod
+    def _parse_entry(data: bytes) -> CameraEntry | None:
+        try:
+            return parse_camera_entry(data)
+        except ValueError as e:
+            raise ServiceError(415, "unsupported_codec", str(e)) from e
+
+    async def _latest_frame(self, queue: str) -> CameraFrame | None:
+        """The newest frame of a camera queue as a JPEG, decoding a VP8 chain when the station stores VP8."""
+        latest = await self._latest_entry(queue)
+        if latest is None:
+            return None
+        id_, entry = latest
+        if entry.kind == FF_JPEG:
+            jpeg, width, height = entry.data, entry.width, entry.height
+        else:
+            jpeg, width, height = await self._decode_vp8(queue, id_, entry)
+        return CameraFrame(jpeg, width, height, entry.camera_name, entry.camera_unique_id, entry.stamp_ns)
+
+    async def _decode_vp8(self, queue: str, id_: bytes, entry: CameraEntry) -> tuple[bytes, int, int]:
+        """Read the VP8 chain from its keyframe entry to `id_` and decode it to the picture at `id_`."""
+        keyframe = entry.keyframe_id(id_)
+        last = entry_id(id_)
+        if keyframe is None or keyframe > last or last - keyframe >= MAX_CHAIN:
+            raise ServiceError(503, "no_frame", f"camera frame {last} names no usable keyframe (chain start {keyframe})")
+        try:
+            chain = await self.client.read_from(queue, entry_id_bytes(keyframe), last - keyframe + 1)
+        except StationError as e:
+            raise self._station_error(e) from e
+        packets = []
+        expected = keyframe
+        for raw_id, data in chain:
+            if entry_id(raw_id) != expected:
+                raise ServiceError(503, "no_frame", f"camera chain {keyframe}..{last} has a gap at entry {expected}")
+            expected += 1
+            member = self._parse_entry(data)
+            if member is None:
+                continue  # a device event inside the chain carries no frame
+            if member.kind != FF_VP8 or member.keyframe_id(raw_id) != keyframe:
+                raise ServiceError(503, "no_frame", f"camera chain {keyframe}..{last} holds a frame of another chain at entry {expected - 1}")
+            packets.append(member.data)
+        if expected != last + 1:
+            raise ServiceError(503, "no_frame", f"camera chain {keyframe}..{last} is not fully stored yet")
+        try:
+            return await asyncio.to_thread(decode_vp8_chain, packets)
+        except ValueError as e:
+            raise ServiceError(503, "no_frame", str(e)) from e
+
     async def list_cameras(self) -> list[dict]:
         """Cameras the station is streaming, with the id to use in `camera_image`."""
         queues = await self._camera_queues()
-        frames = await asyncio.gather(*(self._latest_frame(cq.queue) for cq in queues))
+        latest = await asyncio.gather(*(self._latest_entry(cq.queue) for cq in queues))
+        frames = [e for _, e in (x or (None, None) for x in latest)]
         return [
             {"id": cq.id, "name": f.camera_name if f else "", "unique_id": f.camera_unique_id if f else "",
              "width": f.width if f else 0, "height": f.height if f else 0}

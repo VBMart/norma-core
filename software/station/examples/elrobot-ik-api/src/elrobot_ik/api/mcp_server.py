@@ -120,7 +120,7 @@ def build_mcp(get_service: Callable[[], ArmService]) -> MCPServer:
     async def list_cameras() -> dict[str, Any]:
         return {"cameras": await get_service().list_cameras()}
 
-    @tool(structured_output=False, description="The newest JPEG frame from one camera, as an image.")
+    @tool(structured_output=False, description="The newest frame from one camera as a JPEG image (decoded from the station's VP8 stream).")
     async def get_camera_image(camera_id: str) -> list[types.ImageContent]:
         jpeg, _meta = await get_service().camera_image(camera_id)
         return [types.ImageContent(type="image", data=base64.b64encode(jpeg).decode(), mime_type="image/jpeg")]

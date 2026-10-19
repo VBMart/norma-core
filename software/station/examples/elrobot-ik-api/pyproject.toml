@@ -12,6 +12,8 @@ dependencies = [
     "protobuf>=6.32",
     "pydantic>=2",
     "mcp>=1.10",
+    "av>=15",
+    "pillow>=11",
 ]
 
 [project.scripts]

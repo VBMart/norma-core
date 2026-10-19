@@ -60,8 +60,13 @@ class FakeStation:
                     n = req.read.limit
                     start = normfs_pb2.ServerResponse(); start.read.read_id = rid; start.read.result = normfs_pb2.ReadResponse.RR_START
                     await ws.send(start.SerializeToString())
-                    items = self.queues[req.read.queue_id]
-                    for i, data in list(enumerate(items))[-n:]:
+                    items = list(enumerate(self.queues[req.read.queue_id]))
+                    if req.read.offset.type == normfs_pb2.OT_ABSOLUTE:
+                        first = struct.unpack("<Q", req.read.offset.id.raw)[0] - 1  # entry ids are 1-based here
+                        items = items[first : first + n]
+                    else:
+                        items = items[-n:]
+                    for i, data in items:
                         await ws.send(self._entry(rid, i, data))
                     resp.read.result = normfs_pb2.ReadResponse.RR_END
                     await ws.send(resp.SerializeToString())
@@ -239,5 +244,7 @@ async def test_read_tail_returns_last_entries_and_errors_for_unknown_queue():
                 await client.read_tail("nope", 1)
             assert e.value.code == "not_found"
             assert client.latest_frame == FRAME_A  # the follow stream is untouched
+            from_second = await client.read_from("cam/1", struct.pack("<Q", 2), 5)
+            assert [(struct.unpack("<Q", i)[0], d) for i, d in from_second] == [(2, b"b"), (3, b"c")]
         finally:
             await client.stop()

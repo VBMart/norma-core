@@ -34,7 +34,8 @@ height above the table. Angles about the vertical are positive counter-clockwise
 (`follower`: the one you drive; `leader`: the teleoperation handle), torque, joints and current tool point
 pose. There is no default arm.
 
-**Cameras**: `GET /api/v1/cameras` lists them; `GET /api/v1/cameras/{camera_id}/image` returns the newest JPEG.
+**Cameras**: `GET /api/v1/cameras` lists them; `GET /api/v1/cameras/{camera_id}/image` returns the newest frame as
+JPEG, decoded from the station's VP8 keyframe chain (its default `codec: vp8`) or taken as stored with `codec: jpeg`.
 
 **Motion**: one arm executes one command at a time; a new command for the same arm stops the one in
 flight (that call returns `motion.status: unknown`) and runs instead.
@@ -81,7 +82,7 @@ def create_app(service: ArmService | None = None, settings: Settings | None = No
             {"name": "service", "description": "Health of this service and its station link."},
             {"name": "arms", "description": "Discover arms and read their state: id, role, torque, joints and the current tool pose."},
             {"name": "motion", "description": "Solve and execute moves, gripper, torque. Solve first (`execute: false`), then execute slowly."},
-            {"name": "cameras", "description": "List the station's cameras and fetch their newest JPEG frame."},
+            {"name": "cameras", "description": "List the station's cameras and fetch their newest frame as JPEG (decoded from VP8 when the station stores VP8)."},
         ],
         lifespan=lifespan,
     )

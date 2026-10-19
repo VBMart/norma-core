@@ -121,8 +121,10 @@ async def list_cameras(request: Request) -> list[dict]:
             responses={200: {"content": {"image/jpeg": {}}, "description": "the newest frame"}})
 async def camera_image(camera_id: str, request: Request) -> Response:
     """The newest frame from one camera as `image/jpeg`; `X-Camera-Width`, `X-Camera-Height`
-    and `X-Camera-Stamp-Ns` headers describe it. 404 for an unknown camera, 503 while the
-    camera has not published a frame, 415 if the station stores a codec other than JPEG.
+    and `X-Camera-Stamp-Ns` headers describe it. With the station's default `codec: vp8` the
+    frame is decoded from its VP8 keyframe chain; with `codec: jpeg` it is served as stored.
+    404 for an unknown camera, 503 while the camera has not published a decodable frame,
+    415 if the station stores another codec.
     """
     jpeg, meta = await get_service(request).camera_image(camera_id)
     headers = {"X-Camera-Width": str(meta["width"]), "X-Camera-Height": str(meta["height"]),

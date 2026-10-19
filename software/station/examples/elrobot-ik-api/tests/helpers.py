@@ -1,14 +1,20 @@
 """Shared test builders: register snapshots, inference frames, camera queues, a fake station client."""
+import functools
 from collections.abc import Callable
+from fractions import Fraction
+
+import av
+from PIL import Image
 
 from elrobot_ik.calibration.mapper import MotorMapper
 from elrobot_ik.config import Settings
 from elrobot_ik.service import ArmService
 from elrobot_ik.station import registers as R
 from elrobot_ik.station.arms import parse_frame
+from elrobot_ik.station.cameras import FF_JPEG, FF_VP8, KEYFRAME_FIELD, KEYFRAME_PTR_FIELD
 from elrobot_ik.station.client import StationError
 from elrobot_ik.station.proto import commands_pb2, drivers_pb2, inference_pb2, st3215_pb2
-from elrobot_ik.station.proto.usbvideo import frame_pb2, usbvideo_pb2
+from elrobot_ik.station.proto.usbvideo import usbvideo_pb2
 
 CAL_MIN, CAL_MAX = 1024, 3072
 INSTANCE = "/155b778e7f8b0d414166c9669fd609d5c12e10d48a82916554077bb4e62817eb"
@@ -76,7 +82,10 @@ def make_inference_states(queues: dict[str, str]) -> bytes:
 
 
 def make_camera_frame(jpeg: bytes | None, *, width: int = 320, height: int = 240, product: str = "cam",
-                      unique_id: str = "0x1", kind: str | int = "jpeg", event: str | None = None) -> bytes:
+                      unique_id: str = "0x1", kind: str | int = "jpeg", event: str | None = None,
+                      keyframe: bool = False, keyframe_ptr: int | None = None) -> bytes:
+    """A camera queue entry: a JPEG (`kind="jpeg"`), one VP8 packet of a chain (`kind="vp8"`, with
+    `keyframe` or the chain's `keyframe_ptr` entry id), another codec (`kind=<int>`), or a device event."""
     env = usbvideo_pb2.RxEnvelope()
     env.camera.product = product
     env.camera.unique_id = unique_id
@@ -86,12 +95,53 @@ def make_camera_frame(jpeg: bytes | None, *, width: int = 320, height: int = 240
     env.type = usbvideo_pb2.ET_FRAMES
     env.frames.format.width = width
     env.frames.format.height = height
-    env.frames.format.kind = frame_pb2.FF_JPEG if kind == "jpeg" else kind  # an int: another codec's enum value
+    env.frames.format.kind = {"jpeg": FF_JPEG, "vp8": FF_VP8}.get(kind, kind)  # an int: another codec
+    # The chain fields on the wire as upstream protobufs define them, whether or not this checkout's stubs know them.
+    chain = b""
+    if keyframe:
+        chain += bytes([KEYFRAME_FIELD << 3 | 0, 1])  # varint
+    if keyframe_ptr is not None:
+        chain += bytes([KEYFRAME_PTR_FIELD << 3 | 2, 8]) + keyframe_ptr.to_bytes(8, "little")  # length-delimited
+    env.frames.MergeFromString(chain)
     if jpeg is not None:
         env.frames.frames_data.append(jpeg)
         st = env.frames.stamps.add()
         st.local_stamp_ns = 1_700_000_000_000_000_000
     return env.SerializeToString()
+
+
+@functools.cache
+def vp8_packets(n: int = 4, size: int = 32) -> tuple[bytes, ...]:
+    """`n` real VP8 packets of a tiny clip, one per frame: a keyframe, then deltas (each frame a different colour)."""
+    enc = av.CodecContext.create("libvpx", "w")
+    enc.width = enc.height = size
+    enc.pix_fmt = "yuv420p"
+    enc.time_base = Fraction(1, 30)
+    enc.options = {"g": "1000"}  # one keyframe only
+    packets: list[bytes] = []
+    for i in range(n):
+        frame = av.VideoFrame.from_image(Image.new("RGB", (size, size), (40 * i, 120, 220 - 40 * i))).reformat(format="yuv420p")
+        frame.pts = i
+        packets += [bytes(p) for p in enc.encode(frame)]
+    packets += [bytes(p) for p in enc.encode(None)]
+    assert len(packets) == n
+    return tuple(packets)
+
+
+def vp8_camera_queues(n: int = 4, *, first_id: int = 1) -> dict[str, list[bytes]]:
+    """Fake station queues: one camera storing VP8. Entry 0 is a connect event; the keyframe is entry
+    `first_id`, the deltas after it point at it."""
+    packets = vp8_packets(n)
+    entries = [make_camera_frame(None, event="connected", product="UVC Camera", unique_id="0x113")]
+    while len(entries) < first_id:
+        entries.append(make_camera_frame(None, event="connected"))
+    for i, packet in enumerate(packets):
+        entries.append(make_camera_frame(packet, width=32, height=32, product="UVC Camera", unique_id="0x113", kind="vp8",
+                                         keyframe=(i == 0), keyframe_ptr=None if i == 0 else first_id))
+    return {
+        "inference-states": [make_inference_states({f"{INSTANCE}/st3215/inference": "st", CAM_QUEUE: "video"})],
+        CAM_QUEUE: entries,
+    }
 
 
 def camera_queues(latest_jpeg: bytes = b"\xff\xd8\xffjpeg") -> dict[str, list[bytes]]:
@@ -154,8 +204,18 @@ class FakeStationClient:
             raise StationError("disconnected", "fake station not connected")
         if queue_id not in self.queues:
             raise StationError("not_found", f"queue {queue_id} not found")
-        entries = self.queues[queue_id][-n:]
-        return [(i.to_bytes(8, "little"), e) for i, e in enumerate(entries)]
+        entries = self.queues[queue_id]
+        first = max(len(entries) - n, 0)
+        return [(i.to_bytes(8, "little"), e) for i, e in enumerate(entries[first:], start=first)]
+
+    async def read_from(self, queue_id: str, first_id: bytes, n: int):
+        """Entries from id `first_id` on; entry ids are the list indexes."""
+        if not self.connected:
+            raise StationError("disconnected", "fake station not connected")
+        if queue_id not in self.queues:
+            raise StationError("not_found", f"queue {queue_id} not found")
+        first = int.from_bytes(first_id, "little")
+        return [(i.to_bytes(8, "little"), e) for i, e in enumerate(self.queues[queue_id][first : first + n], start=first)]
 
     @property
     def st3215_commands(self) -> list[st3215_pb2.Command]:

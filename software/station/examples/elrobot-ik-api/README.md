@@ -53,7 +53,7 @@ The tool point is the center of the closed jaws' tip edge, 0.104 beyond the wris
 | POST | `/arms/{id}/gripper` | `{open, speed?, accel?}` open (1) or close (0) the jaws |
 | POST | `/arms/{id}/torque` | `{enabled}` hold or release all motors |
 | GET | `/cameras` | Cameras with `id`, name and frame size |
-| GET | `/cameras/{id}/image` | Newest frame as JPEG |
+| GET | `/cameras/{id}/image` | Newest frame as JPEG (decoded from the station's VP8 chain, or stored JPEG) |
 | GET | `/urdf` | The robot's URDF XML (`?variant=model` adds the tool frame and table box); meshes under `/urdf/assets/` |
 
 Executing a move first releases the arm from the station's leader→follower mirroring, so the leader stops overriding it.
@@ -71,7 +71,7 @@ Add `"execute": true` to move; `motor_steps` in the solve-only response is exact
 
 ## Errors
 
-404 unknown arm or camera (`context.candidates` lists the known ids); 409 `not_calibrated`, `motor_error`; 422 `unreachable`, `collision`, `invalid_gripper`, or `invalid_request` for a malformed body; 415 `unsupported_codec` (camera frame is not JPEG); 500 `limit_violation` (solver inconsistency, nothing is sent); 503 `station_disconnected`, `no_frame`, `stale_frame`. Bodies are `{"error", "detail", "context"}`.
+404 unknown arm or camera (`context.candidates` lists the known ids); 409 `not_calibrated`, `motor_error`; 422 `unreachable`, `collision`, `invalid_gripper`, or `invalid_request` for a malformed body; 415 `unsupported_codec` (the station stores camera frames in a codec other than VP8 or JPEG); 500 `limit_violation` (solver inconsistency, nothing is sent); 503 `station_disconnected`, `no_frame`, `stale_frame`. Bodies are `{"error", "detail", "context"}`.
 
 ## For AI agents: AGENTS.md and the MCP endpoint
 

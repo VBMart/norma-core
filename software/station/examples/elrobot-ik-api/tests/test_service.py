@@ -10,6 +10,7 @@ from elrobot_ik.kinematics.ik import IKResult
 from elrobot_ik.kinematics.transforms import make_transform, rpy_to_rotation
 from elrobot_ik.service import ServiceError
 from elrobot_ik.station.arms import parse_frame
+from elrobot_ik.station.cameras import decode_vp8_chain
 from elrobot_ik.station.client import StationError
 from elrobot_ik.station.proto import mirroring_pb2, st3215_pb2
 from tests.helpers import (
@@ -27,6 +28,8 @@ from tests.helpers import (
     make_inference_states,
     make_motor_state,
     make_service,
+    vp8_camera_queues,
+    vp8_packets,
 )
 
 TORQUE, ACCEL, GOAL_SPEED, GOAL = 0x28, 0x29, 0x2E, 0x2A
@@ -524,6 +527,42 @@ async def test_list_cameras_and_image(model, solver):
     with pytest.raises(ServiceError) as e:
         await svc.camera_image("nope")
     assert e.value.status == 404 and e.value.code == "not_found"
+
+
+async def test_camera_image_decodes_the_vp8_chain_from_its_keyframe(model, solver):
+    svc, _ = make_service(model, solver, calibrated_frame(), queues=vp8_camera_queues(4))
+    cams = await svc.list_cameras()
+    assert cams == [{"id": CAM_ID, "name": "UVC Camera", "unique_id": "0x113", "width": 32, "height": 32}]
+    jpeg, meta = await svc.camera_image(CAM_ID)
+    assert jpeg[:2] == b"\xff\xd8" and meta["width"] == 32 and meta["height"] == 32
+    expected, _, _ = decode_vp8_chain(vp8_packets(4))
+    assert jpeg == expected  # the whole chain was decoded, not just the keyframe
+
+
+async def test_camera_image_refuses_a_chain_with_a_gap_or_a_foreign_frame(model, solver):
+    svc, client = make_service(model, solver, calibrated_frame(), queues=vp8_camera_queues(4))
+    queue = client.queues[CAM_QUEUE]
+    good = list(queue)
+    queue[2] = make_camera_frame(None, event="connected")  # an event inside the chain is skipped, the chain still decodes
+    assert (await svc.camera_image(CAM_ID))[0][:2] == b"\xff\xd8"
+    queue[2] = make_camera_frame(vp8_packets(4)[1], kind="vp8", keyframe_ptr=0)  # a frame of another chain
+    with pytest.raises(ServiceError) as e:
+        await svc.camera_image(CAM_ID)
+    assert e.value.status == 503 and "another chain" in e.value.detail
+    client.queues[CAM_QUEUE] = good[:1] + good[2:]  # entry 1, the keyframe, is gone: the deltas point at an event
+    with pytest.raises(ServiceError) as e:
+        await svc.camera_image(CAM_ID)
+    assert e.value.status == 503 and "no_frame" == e.value.code
+
+
+async def test_camera_image_refuses_an_endless_chain(model, solver):
+    svc, client = make_service(model, solver, calibrated_frame(), queues=vp8_camera_queues(2))
+    # A delta 1030 entries after its keyframe: the station's keyframe policy is broken, do not decode minutes of video.
+    client.queues[CAM_QUEUE] += [make_camera_frame(None, event="connected")] * 1030
+    client.queues[CAM_QUEUE].append(make_camera_frame(vp8_packets(2)[1], kind="vp8", keyframe_ptr=1))
+    with pytest.raises(ServiceError) as e:
+        await svc.camera_image(CAM_ID)
+    assert e.value.status == 503 and "keyframe" in e.value.detail
 
 
 async def test_camera_that_appears_after_the_listing_is_found_on_first_request(model, solver):

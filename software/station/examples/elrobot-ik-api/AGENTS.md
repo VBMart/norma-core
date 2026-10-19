@@ -57,7 +57,7 @@ The wrist pitch limit (101°) bounds how far a vertical gripper reaches: about *
 
 `{id}` is the bus serial from `GET /arms`; there is no default arm. An uncalibrated arm is listed with `calibrated: false` and null `pose`, `gripper` and `angle_rad`. Omitting `gripper` keeps the current opening: the gripper servo is not written at all, so a grip on an object survives the move. Solve responses are `{reachable, executed, pose: {position, rpy, rotation_deg}, joint_angles_rad, motor_steps, motion: {status, duration_ms}}`; `motor_steps` are the servo goals an execute writes.
 
-Errors are `{"error", "detail", "context"}`: 404 unknown arm or camera (`context.candidates`); 409 `not_calibrated`, `motor_error`; 422 `invalid_request` (malformed body),  `unreachable`, `collision`, `invalid_gripper`; 415 `unsupported_codec`; 500 `limit_violation` (nothing sent); 503 `station_disconnected`, `no_frame`, `stale_frame`.
+Errors are `{"error", "detail", "context"}`: 404 unknown arm or camera (`context.candidates`); 409 `not_calibrated`, `motor_error`; 422 `invalid_request` (malformed body),  `unreachable`, `collision`, `invalid_gripper`; 415 `unsupported_codec` (the station stores frames in a codec other than VP8 or JPEG); 500 `limit_violation` (nothing sent); 503 `station_disconnected`, `no_frame`, `stale_frame`.
 
 What to do with them: `not_calibrated`: ask the user to calibrate in the station UI (Calibration page, Auto Calibrate, Freeze). `station_disconnected`, `stale_frame`, `no_frame`: wait a moment, check `/health`, retry. `unreachable`: bring the target closer, lower, or change `yaw`. `collision`: raise `z` or turn the jaws. `motor_error`: stop and tell the user which motors (`context.motors`). `limit_violation`: a solver bug, report it.
 
@@ -79,7 +79,7 @@ A pick: open the gripper (`open: 1`), `move-to` a point 0.03–0.05 above the ob
 
 ## MCP
 
-The same operations are exposed as MCP tools at `http://localhost:8020/mcp` (Streamable HTTP, stateless): `health`, `list_arms`, `move_to`, `set_gripper`, `set_torque`, `list_cameras`, `get_camera_image` (returns the JPEG as image content), plus a resource `elrobot://guide` that returns this file. Every arm tool takes `arm_id`. Errors come back as tool errors with the same `error` codes. Register it in Claude Code with:
+The same operations are exposed as MCP tools at `http://localhost:8020/mcp` (Streamable HTTP, stateless): `health`, `list_arms`, `move_to`, `set_gripper`, `set_torque`, `list_cameras`, `get_camera_image` (returns the newest frame as JPEG image content, decoded from the station's VP8 stream), plus a resource `elrobot://guide` that returns this file. Every arm tool takes `arm_id`. Errors come back as tool errors with the same `error` codes. Register it in Claude Code with:
 
 ```bash
 claude mcp add --transport http elrobot http://localhost:8020/mcp
