@@ -27,5 +27,5 @@ def test_parse_camera_frame_jpeg():
 
 def test_parse_camera_frame_ignores_events_and_other_codecs():
     assert parse_camera_frame(make_camera_frame(None, event="connected")) is None
-    with pytest.raises(ValueError, match="FF_VP8"):
-        parse_camera_frame(make_camera_frame(b"vp8", kind="vp8"))
+    with pytest.raises(ValueError, match="only FF_JPEG"):
+        parse_camera_frame(make_camera_frame(b"vp8", kind=2))  # FF_VP8 in newer protobufs; unnamed in older ones

@@ -88,4 +88,4 @@ uv run pytest       # no hardware needed
 uv run ruff check   # lint (config in pyproject.toml)
 ```
 
-The robot model is not kept here: `hatch_build.py` copies `hardware/elrobot/simulation/` (URDF and meshes) into `src/elrobot_ik/urdf/` when `uv sync` builds the package, so this example must be built from inside a norma-core checkout. The protobuf stubs under `src/elrobot_ik/station/proto/` are generated with `protoc` from the repo's `protobufs/` and checked in.
+Neither the robot model nor the protobuf stubs are kept here: when `uv sync` builds the package, `hatch_build.py` copies `hardware/elrobot/simulation/` (URDF and meshes) into `src/elrobot_ik/urdf/` and generates the stubs under `src/elrobot_ik/station/proto/` from the repo's `protobufs/` with the `protoc` bundled in `grpcio-tools` (a build-only dependency). So this example must be built from inside a norma-core checkout, and after a change to the model or the `.proto` files run `uv sync --reinstall-package elrobot-ik`.

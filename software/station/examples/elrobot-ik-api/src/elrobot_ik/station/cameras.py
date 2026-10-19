@@ -48,8 +48,9 @@ def parse_camera_frame(entry: bytes) -> CameraFrame | None:
     if env.type != usbvideo_pb2.ET_FRAMES or not env.frames.frames_data:
         return None
     kind = env.frames.format.kind
-    if kind != frame_pb2.FF_JPEG:
-        raise ValueError(f"camera frames are {frame_pb2.FrameFormatKind.Name(kind)}, only FF_JPEG is supported")
+    if kind != frame_pb2.FF_JPEG:  # a codec this build's protobufs may not even name yet (FF_VP8 in newer stations)
+        name = frame_pb2.FrameFormatKind.Name(kind) if kind in frame_pb2.FrameFormatKind.values() else f"kind {kind}"
+        raise ValueError(f"camera frames are {name}, only FF_JPEG is supported")
     stamp = env.frames.stamps[-1].local_stamp_ns if env.frames.stamps else 0
     return CameraFrame(
         jpeg=bytes(env.frames.frames_data[-1]),

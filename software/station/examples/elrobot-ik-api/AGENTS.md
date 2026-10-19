@@ -88,7 +88,7 @@ claude mcp add --transport http elrobot http://localhost:8020/mcp
 ## Working in this repository
 
 - Python 3.12, `uv`. Tests: `uv run pytest` (no hardware needed; they use a fake station). Run them before claiming anything works.
-- Layout: `src/elrobot_ik/station/` (NormFS protobuf over WebSocket, register parsing), `calibration/mapper.py` (steps ↔ radians), `kinematics/` (placo model, IK), `service.py` (preconditions, collision checks, execution), `api/` (FastAPI routes, MCP), `hatch_build.py` (copies the URDF and meshes from `hardware/elrobot/simulation` at build time).
+- Layout: `src/elrobot_ik/station/` (NormFS protobuf over WebSocket, register parsing), `calibration/mapper.py` (steps ↔ radians), `kinematics/` (placo model, IK), `service.py` (preconditions, collision checks, execution), `api/` (FastAPI routes, MCP), `hatch_build.py` (at build time copies the URDF and meshes from `hardware/elrobot/simulation` and generates the protobuf stubs from `protobufs/`).
 - Conventions baked in and verified on hardware (do not change casually): joint directions `1,1,1,1,1,1,1,-1`; URDF gripper angle 0 = jaws open; world origin on the base yaw axis; tool point = jaw tip edge center.
 - The API has no calibration endpoints; the station's frozen servo arcs are mapped linearly onto the URDF joint ranges.
 - First contact with real hardware: calibrate in the station UI, then solve-only moves, then slow executes (`speed: 200, accel: 10`) near the home pose.

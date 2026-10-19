@@ -76,7 +76,7 @@ def make_inference_states(queues: dict[str, str]) -> bytes:
 
 
 def make_camera_frame(jpeg: bytes | None, *, width: int = 320, height: int = 240, product: str = "cam",
-                      unique_id: str = "0x1", kind: str = "jpeg", event: str | None = None) -> bytes:
+                      unique_id: str = "0x1", kind: str | int = "jpeg", event: str | None = None) -> bytes:
     env = usbvideo_pb2.RxEnvelope()
     env.camera.product = product
     env.camera.unique_id = unique_id
@@ -86,7 +86,7 @@ def make_camera_frame(jpeg: bytes | None, *, width: int = 320, height: int = 240
     env.type = usbvideo_pb2.ET_FRAMES
     env.frames.format.width = width
     env.frames.format.height = height
-    env.frames.format.kind = frame_pb2.FF_JPEG if kind == "jpeg" else frame_pb2.FF_VP8
+    env.frames.format.kind = frame_pb2.FF_JPEG if kind == "jpeg" else kind  # an int: another codec's enum value
     if jpeg is not None:
         env.frames.frames_data.append(jpeg)
         st = env.frames.stamps.add()
