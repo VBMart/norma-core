@@ -11,7 +11,7 @@ from elrobot_ik.config import Settings
 from elrobot_ik.service import ArmService
 from elrobot_ik.station import registers as R
 from elrobot_ik.station.arms import parse_frame
-from elrobot_ik.station.cameras import FF_JPEG, FF_VP8, KEYFRAME_FIELD, KEYFRAME_PTR_FIELD
+from elrobot_ik.station.cameras import FF_JPEG, FF_VP8
 from elrobot_ik.station.client import StationError
 from elrobot_ik.station.proto import commands_pb2, drivers_pb2, inference_pb2, st3215_pb2
 from elrobot_ik.station.proto.usbvideo import usbvideo_pb2
@@ -96,13 +96,9 @@ def make_camera_frame(jpeg: bytes | None, *, width: int = 320, height: int = 240
     env.frames.format.width = width
     env.frames.format.height = height
     env.frames.format.kind = {"jpeg": FF_JPEG, "vp8": FF_VP8}.get(kind, kind)  # an int: another codec
-    # The chain fields on the wire as upstream protobufs define them, whether or not this checkout's stubs know them.
-    chain = b""
-    if keyframe:
-        chain += bytes([KEYFRAME_FIELD << 3 | 0, 1])  # varint
+    env.frames.keyframe = keyframe
     if keyframe_ptr is not None:
-        chain += bytes([KEYFRAME_PTR_FIELD << 3 | 2, 8]) + keyframe_ptr.to_bytes(8, "little")  # length-delimited
-    env.frames.MergeFromString(chain)
+        env.frames.keyframe_ptr = keyframe_ptr.to_bytes(8, "little")
     if jpeg is not None:
         env.frames.frames_data.append(jpeg)
         st = env.frames.stamps.add()

@@ -13,21 +13,14 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 
 import av
-from google.protobuf.unknown_fields import UnknownFieldSet
 
 from elrobot_ik.station.proto import drivers_pb2, inference_pb2
 from elrobot_ik.station.proto.usbvideo import frame_pb2, usbvideo_pb2
 
 INFERENCE_STATES_QUEUE = "inference-states"
 
-# The VP8 additions to protobufs/drivers/usbvideo (norma-core "Store USB camera frames as VP8"):
-# frame.FrameFormatKind.FF_VP8 and FramesPack.keyframe (13) / keyframe_ptr (14). The stubs are
-# generated from this checkout's protobufs, so when those predate the change the values are read
-# by number; with current protobufs the generated fields are used. Either way the wire format is
-# the same, so this needs no local copy of the proto files.
 FF_JPEG = frame_pb2.FF_JPEG
-FF_VP8 = getattr(frame_pb2, "FF_VP8", 2)
-KEYFRAME_FIELD, KEYFRAME_PTR_FIELD = 13, 14
+FF_VP8 = frame_pb2.FF_VP8
 KIND_NAMES = {FF_JPEG: "FF_JPEG", FF_VP8: "FF_VP8"}
 
 # The station places a keyframe about once a second (at most every 5 s), so a chain this long
@@ -105,7 +98,6 @@ def parse_camera_entry(entry: bytes) -> CameraEntry | None:
     if kind not in KIND_NAMES:
         name = frame_pb2.FrameFormatKind.Name(kind) if kind in frame_pb2.FrameFormatKind.values() else f"kind {kind}"
         raise ValueError(f"camera frames are {name}, only FF_VP8 and FF_JPEG are supported")
-    keyframe, keyframe_ptr = vp8_chain_fields(env.frames)
     return CameraEntry(
         kind=kind,
         data=bytes(env.frames.frames_data[-1]),
@@ -114,22 +106,9 @@ def parse_camera_entry(entry: bytes) -> CameraEntry | None:
         camera_name=env.camera.product,
         camera_unique_id=env.camera.unique_id,
         stamp_ns=env.frames.stamps[-1].local_stamp_ns if env.frames.stamps else 0,
-        keyframe=keyframe,
-        keyframe_ptr=keyframe_ptr,
+        keyframe=env.frames.keyframe,
+        keyframe_ptr=bytes(env.frames.keyframe_ptr),
     )
-
-
-def vp8_chain_fields(frames: frame_pb2.FramesPack) -> tuple[bool, bytes]:
-    """(keyframe, keyframe_ptr) of a FramesPack, from the generated fields or, with older protobufs, by field number."""
-    if "keyframe" in frames.DESCRIPTOR.fields_by_name:
-        return frames.keyframe, bytes(frames.keyframe_ptr)
-    keyframe, keyframe_ptr = False, b""
-    for field in UnknownFieldSet(frames):
-        if field.field_number == KEYFRAME_FIELD:
-            keyframe = bool(field.data)
-        elif field.field_number == KEYFRAME_PTR_FIELD:
-            keyframe_ptr = bytes(field.data)
-    return keyframe, keyframe_ptr
 
 
 def decode_vp8_chain(packets: Iterable[bytes]) -> tuple[bytes, int, int]:
