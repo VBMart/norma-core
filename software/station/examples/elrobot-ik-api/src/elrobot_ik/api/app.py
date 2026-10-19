@@ -81,7 +81,7 @@ def create_app(service: ArmService | None = None, settings: Settings | None = No
         openapi_tags=[
             {"name": "service", "description": "Health of this service and its station link."},
             {"name": "arms", "description": "Discover arms and read their state: id, role, torque, joints and the current tool pose."},
-            {"name": "motion", "description": "Solve and execute moves, gripper, torque. Solve first (`execute: false`), then execute slowly."},
+            {"name": "motion", "description": "Solve and execute moves, gripper, torque. Execute slowly."},
             {"name": "cameras", "description": "List the station's cameras and fetch their newest frame as JPEG (decoded from VP8 when the station stores VP8)."},
         ],
         lifespan=lifespan,

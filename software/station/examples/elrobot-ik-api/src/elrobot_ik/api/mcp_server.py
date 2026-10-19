@@ -28,7 +28,7 @@ World frame: origin on the base motor's rotation axis at table level, X forward,
 The tool point is the center of the closed jaws' tip edge; z is its height above the table.
 move_to with orientation rpy {roll: -1.5708, pitch: 0, yaw: θ} points the gripper straight down with the jaws
 turned by θ radians (0 = fore-and-aft, 1.5708 = sideways).
-Always solve first (execute=false), check reachable, then execute slowly (speed 200, accel 10).
+Execute slowly (speed 200, accel 10).
 Plan the path yourself: the collision check knows only the robot and the table, not the objects on it, so never
 send one straight move through where objects may stand. The usual shape is a pre-pose a few cm short of the target
 along the gripper's approach axis, then a short straight move in, and the same short move out before going
