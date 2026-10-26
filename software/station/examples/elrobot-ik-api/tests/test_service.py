@@ -230,8 +230,10 @@ async def test_execute_stops_mirroring_then_sends_torque_speed_accel_goal(model,
     assert client.driver_types[0] == 1  # STC_MOTOR_MIRRORING_COMMAND first
     stop = mirroring_pb2.Command.FromString(client.sent[0][0].body)
     assert stop.type == mirroring_pb2.CT_STOP_MIRROR and stop.source.unique_id == "F1"
-    assert addresses(client) == DRIVE_ADDRESSES
-    torque, speed, accel, goal = client.st3215_commands
+    assert addresses(client) == [TORQUE, *DRIVE_ADDRESSES]
+    restore, torque, speed, accel, goal = client.st3215_commands
+    assert {w.motor_id for w in restore.sync_write.motors} == set(range(1, 9))
+    assert {w.motor_id for w in torque.sync_write.motors} == set(range(1, 8))
     assert all(m.value == b"\x01" for m in torque.sync_write.motors)
     assert int.from_bytes(speed.sync_write.motors[0].value, "little") == 800
     assert accel.sync_write.motors[0].value == bytes([40])
@@ -292,14 +294,15 @@ async def test_set_torque(model, solver):
     assert res == {"id": "F1", "torque_enabled": False}
     assert addresses(client) == [TORQUE]
     assert all(m.value == b"\x00" for m in client.st3215_commands[0].sync_write.motors)
-    assert client.driver_types == [0]  # releasing does not touch mirroring
+    assert client.driver_types == [0]  # not mirrored: nothing to detach before releasing
     client.sent.clear()
     await svc.set_torque("F1", True)
-    assert client.driver_types == [0]  # not mirrored: nothing to release
+    assert client.driver_types == [0, 0]  # hold current positions before enabling released motors
+    assert addresses(client) == [GOAL, TORQUE]
     client.sent.clear()
     client.queues.update(mirroring_queues("F1"))
     await svc.set_torque("F1", True)
-    assert client.driver_types == [1, 0]  # holding a mirrored arm first releases it from leader mirroring
+    assert client.driver_types == [1, 0, 0]  # detach, restore prior torque, explicit all-motor torque request
 
 
 async def test_station_error_becomes_503(model, solver):

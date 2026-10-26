@@ -105,7 +105,7 @@ def test_move_to_execute_stops_mirroring_then_drives(model, solver):
     assert r.status_code == 200, r.text
     assert r.json()["executed"] is True and r.json()["motion"]["status"] == "stalled"  # fake arm never moves
     assert station.driver_types[0] == 1
-    assert [c.sync_write.address for c in station.st3215_commands] == [0x28, 0x2E, 0x29, 0x2A, 0x2A, 0x2A]
+    assert [c.sync_write.address for c in station.st3215_commands] == [0x28, 0x28, 0x2E, 0x29, 0x2A, 0x2A, 0x2A]
 
 
 def test_move_to_execute_on_unmirrored_arm_sends_no_stop(model, solver):
