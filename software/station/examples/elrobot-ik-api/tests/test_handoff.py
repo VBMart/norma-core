@@ -116,21 +116,21 @@ async def test_timeout_retains_restoration_for_retry_without_a_second_stop(model
     assert not svc._pending_handoffs
 
 
-async def test_retry_resends_stop_when_the_receipt_was_never_seen(model, solver):
+async def test_retry_completes_on_the_echo_when_the_receipt_was_never_seen(model, solver):
     """The driver's torque-off landed but a later command overwrote its receipt before the service
     saw it (or the driver never wrote it). A retry must not wait again for a receipt that cannot
-    come: torque is already off on that bus, so a fresh stop costs nothing and yields a fresh receipt."""
+    come, nor send another stop: the driver's echo of the stop says its torque-off is already queued
+    ahead of anything sent now."""
     initial = {1, 3, 8}
     svc, client = make_service(model, solver, frame_with_torque(initial), queues=mirroring_queues('F1'),
                                settings=Settings(**FAST, handoff_timeout_s=0.08))
-    delay_stop(client)
+    delay_stop(client)  # echoes the stop, never writes its torque-off
     with pytest.raises(ServiceError, match='torque-off was not confirmed'):
         await operate(svc, 'gripper')
     client.apply_torque(torque_command('F1', range(1, 9), False))  # off bits only: the receipt is gone
     assert 'F1' in svc._pending_handoffs and not svc._pending_handoffs['F1'].released
-    client.auto_stop = True  # the second stop completes normally
     await operate(svc, 'gripper')
-    assert client.driver_types.count(1) == 2
+    assert client.driver_types.count(1) == 1
     assert torque_ids(client) == initial | {8}
     assert not svc._pending_handoffs
 
@@ -340,3 +340,65 @@ async def test_torque_release_succeeds_while_a_motor_flags_an_error(model, solve
     assert res == {'id': 'F1', 'torque_enabled': False}
     assert torque_ids(client) == set()
     assert (1 in client.driver_types) is mirrored
+
+
+async def test_retry_waits_for_the_echo_of_a_stop_the_driver_still_holds(model, solver):
+    """A second stop behind one the driver has not processed yet would torque the bus off again after
+    the first stop's receipt let the retry restore torque and move. So a retry sends nothing and waits
+    for the driver to echo the stop; the echo means its torque-off is queued ahead of the restoration."""
+    initial = {1, 3, 8}
+    svc, client = make_service(model, solver, frame_with_torque(initial), queues=mirroring_queues('F1'),
+                               settings=Settings(**FAST, handoff_timeout_s=0.3))
+    client.auto_stop = False  # the driver sits on the stop: no echo, no torque-off
+    client.arrive_at_goals()
+    with pytest.raises(ServiceError, match='torque-off was not confirmed'):
+        await operate(svc, 'gripper')
+    assert client.driver_types.count(1) == 1
+    retry = asyncio.create_task(operate(svc, 'gripper'))
+    await asyncio.sleep(0.04)
+    assert not retry.done() and client.driver_types.count(1) == 1 and not client.st3215_commands
+    client.detach_mirroring('F1')  # the driver gets to the stop and echoes it
+    assert (await retry)['motion']['status'] == 'reached'
+    assert client.driver_types.count(1) == 1
+    assert torque_ids(client) == initial | {8}
+    assert not svc._pending_handoffs
+
+
+async def test_first_stop_echo_is_required_even_with_a_receipt(model, solver):
+    """A receipt and off bits alone could come from someone else's stop; the handoff also needs the
+    driver to have processed its own stop before it restores torque."""
+    svc, client = make_service(model, solver, calibrated_frame(), queues=mirroring_queues('F1'))
+    client.auto_stop = False
+    client.arrive_at_goals()
+    request = asyncio.create_task(operate(svc, 'gripper'))
+    await until(lambda: 1 in client.driver_types)
+    client.queues[MIRRORING_QUEUE].append(make_mirroring_state())  # mirroring gone, but not by our stop
+    client.complete_stop('F1')
+    await asyncio.sleep(0.04)
+    assert not request.done() and not client.st3215_commands
+    client.detach_mirroring('F1')
+    await request
+    assert torque_ids(client) == set(range(1, 9))
+
+
+async def test_retry_sends_the_stop_when_its_write_was_never_acknowledged(model, solver):
+    """An unacknowledged stop write is not recorded as written: nothing says it was queued, so the
+    retry sends the stop, this time waiting for its receipt like a first attempt."""
+    svc, client = make_service(model, solver, calibrated_frame(), queues=mirroring_queues('F1'))
+    send = client.send_commands
+
+    async def lose_stop_write(commands):
+        if isinstance(commands[0], commands_pb2.DriverCommand):
+            raise StationError('timeout', 'station did not acknowledge the command write')
+        await send(commands)
+    client.send_commands = lose_stop_write
+    with pytest.raises(ServiceError, match='did not acknowledge') as e:
+        await operate(svc, 'gripper')
+    assert e.value.code == 'station_timeout'
+    assert 'F1' in svc._pending_handoffs and not svc._pending_handoffs['F1'].stop_written
+    client.send_commands = send
+    client.arrive_at_goals()
+    await operate(svc, 'gripper')
+    assert client.driver_types.count(1) == 1
+    assert torque_ids(client) == set(range(1, 9))
+    assert not svc._pending_handoffs

@@ -229,7 +229,10 @@ class FakeStationClient:
             self.on_send(list(commands))
 
     def detach_mirroring(self, serial):
+        """The mirroring driver processing a stop for `serial`: it publishes the new state with the stop echoed."""
         env = mirroring_pb2.RxEnvelope.FromString(self.queues[MIRRORING_QUEUE][-1])
+        env.command.type = mirroring_pb2.CT_STOP_MIRROR
+        env.command.source.unique_id = serial
         for mapping in env.state.mirroring:
             remaining = [t for t in mapping.targets if t.id.unique_id != serial]
             del mapping.targets[:]

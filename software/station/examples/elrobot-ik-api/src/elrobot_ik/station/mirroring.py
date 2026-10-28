@@ -16,6 +16,14 @@ def mirroring_targets(entry: bytes) -> frozenset[str]:
     return frozenset(t.id.unique_id for m in env.state.mirroring for t in m.targets)
 
 
+def stop_acknowledged(entry: bytes, serial: str) -> bool:
+    """Whether an entry is the driver's echo of a stop-mirror command for this bus. The driver publishes
+    one entry per command it processes, carrying that command, so the echo says the stop was processed
+    (and its torque-off spawned); it says nothing about whether that torque-off has landed."""
+    command = mirroring_pb2.RxEnvelope.FromString(entry).command
+    return command.type == mirroring_pb2.CT_STOP_MIRROR and command.source.unique_id == serial
+
+
 def torque_release_receipt(frame: bytes | None, serial: str) -> bytes | None:
     """A completed whole-bus torque-off write from the existing mirroring driver.
 
