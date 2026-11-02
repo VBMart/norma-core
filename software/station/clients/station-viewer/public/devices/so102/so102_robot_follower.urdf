@@ -1,0 +1,172 @@
+<?xml version="1.0" ?>
+<!-- SO-ARM 102 follower arm, Robonine (https://github.com/roboninecom/SO-ARM102) -->
+<!-- Source: simulation/urdf/so_arm_102.urdf and simulation/urdf/meshes/*.stl at commit f0a993e -->
+<!-- Licence: CC-BY-4.0 (simulation assets), see the repository's LICENSING.md -->
+<!-- Changes for the station viewer: fitted-box <collision> elements removed (unused by the viewer), mesh paths moved from meshes/ to assets/ -->
+<robot name="so_arm_102_pre_for_urdf_v5">
+  <material name="silver">
+    <color rgba="0.700 0.700 0.700 1.000" />
+  </material>
+  <link name="base_link">
+    <inertial>
+      <origin xyz="-0.00753657459228 2.70964811146e-05 0.013641047398" rpy="0 0 0" />
+      <mass value="0.178499229726" />
+      <inertia ixx="0.000199871543864" iyy="0.000148679123423" izz="0.000331455821027" ixy="1.90199840717e-07" iyz="4.23062670743e-08" ixz="-2.10081183092e-06" />
+    </inertial>
+    <visual>
+      <origin xyz="-0 -0 -0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="assets/base_link.stl" scale="0.001 0.001 0.001" />
+      </geometry>
+      <material name="silver" />
+    </visual>
+  </link>
+  <link name="link1_1">
+    <inertial>
+      <origin xyz="0.000323477926688 -9.49285422888e-06 0.0277445919724" rpy="0 0 0" />
+      <mass value="0.201603775922" />
+      <inertia ixx="0.000198444068688" iyy="0.000237480937143" izz="0.000210354023061" ixy="7.13434120346e-08" iyz="8.6838415384e-08" ixz="-3.34183738347e-05" />
+    </inertial>
+    <visual>
+      <origin xyz="0.006 1.10978314851e-16 -0.025" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="assets/link1_1.stl" scale="0.001 0.001 0.001" />
+      </geometry>
+      <material name="silver" />
+    </visual>
+  </link>
+  <link name="link2_1">
+    <inertial>
+      <origin xyz="-9.08588393138e-05 0.0179996080154 0.0565027997369" rpy="0 0 0" />
+      <mass value="0.180993297738" />
+      <inertia ixx="0.000343822377525" iyy="0.000338733474867" izz="3.40211492897e-05" ixy="3.26214111802e-10" iyz="1.62595657322e-06" ixz="-8.83251140382e-08" />
+    </inertial>
+    <visual>
+      <origin xyz="-0.034 0.018 -0.098356707952" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="assets/link2_1.stl" scale="0.001 0.001 0.001" />
+      </geometry>
+      <material name="silver" />
+    </visual>
+  </link>
+  <link name="link3_1">
+    <inertial>
+      <origin xyz="0.0899345844067 -0.0180532098499 0.030929698344" rpy="0 0 0" />
+      <mass value="0.121036400289" />
+      <inertia ixx="4.68441522042e-05" iyy="0.000261776819052" izz="0.000274572705914" ixy="-3.51127629536e-07" iyz="-1.941119197e-08" ixz="-2.45262905805e-05" />
+    </inertial>
+    <visual>
+      <origin xyz="-0.0340339589459 -0.017999879491 -0.211357541714" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="assets/link3_1.stl" scale="0.001 0.001 0.001" />
+      </geometry>
+      <material name="silver" />
+    </visual>
+  </link>
+  <link name="link4_1">
+    <inertial>
+      <origin xyz="0.0367612549493 -0.00682773158541 -9.36509085222e-05" rpy="0 0 0" />
+      <mass value="0.0850684506718" />
+      <inertia ixx="2.5361050179e-05" iyy="2.1143272577e-05" izz="3.58784706539e-05" ixy="-2.59566550716e-06" iyz="4.37062265793e-08" ixz="1.43173507335e-07" />
+    </inertial>
+    <visual>
+      <origin xyz="-0.1690931926 -0.0179996182572 -0.244995122636" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="assets/link4_1.stl" scale="0.001 0.001 0.001" />
+      </geometry>
+      <material name="silver" />
+    </visual>
+  </link>
+  <link name="link5_1">
+    <inertial>
+      <origin xyz="0.0344926242899 -3.24353462452e-05 0.0128432467385" rpy="0 0 0" />
+      <mass value="0.106616468137" />
+      <inertia ixx="9.43485888891e-05" iyy="6.44606301656e-05" izz="7.93067623665e-05" ixy="-3.08426233239e-07" iyz="5.47431071095e-08" ixz="8.10180709222e-06" />
+    </inertial>
+    <visual>
+      <origin xyz="-0.22828777435 6.48704621215e-07 -0.244954758855" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="assets/link5_1.stl" scale="0.001 0.001 0.001" />
+      </geometry>
+      <material name="silver" />
+    </visual>
+  </link>
+  <link name="clamp1_1">
+    <inertial>
+      <origin xyz="0.0150861322583 -0.0085189835284 -0.0166385856799" rpy="0 0 0" />
+      <mass value="0.00734953722517" />
+      <inertia ixx="1.97265726696e-06" iyy="5.39853666319e-06" izz="3.8596220542e-06" ixy="3.98221847911e-07" iyz="2.68780494505e-08" ixz="-1.19938943731e-07" />
+    </inertial>
+    <visual>
+      <origin xyz="-0.292287773689 -0.0165014310175 -0.260952682391" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="assets/clamp1_1.stl" scale="0.001 0.001 0.001" />
+      </geometry>
+      <material name="silver" />
+    </visual>
+  </link>
+  <link name="clamp2_1">
+    <inertial>
+      <origin xyz="0.0150861312617 0.00851898352954 -0.0153534196604" rpy="0 0 0" />
+      <mass value="0.00734953759363" />
+      <inertia ixx="1.97257592577e-06" iyy="5.3984553248e-06" izz="3.85962221953e-06" ixy="-3.98222180309e-07" iyz="2.74954514022e-08" ixz="1.20960862679e-07" />
+    </inertial>
+    <visual>
+      <origin xyz="-0.292287775113 0.0154985689825 -0.260952680771" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="assets/clamp2_1.stl" scale="0.001 0.001 0.001" />
+      </geometry>
+      <material name="silver" />
+    </visual>
+  </link>
+  <joint name="base_to_link1" type="revolute">
+    <origin xyz="-0.006 -1.10978314851e-16 0.025" rpy="0 0 0" />
+    <parent link="base_link" />
+    <child link="link1_1" />
+    <axis xyz="-3.48927236311e-15 -1.38855301773e-17 -1" />
+    <limit effort="2.942" velocity="4.717" lower="-3.07177948351" upper="3.07177948351" />
+  </joint>
+  <joint name="link1_to_link2" type="revolute">
+    <origin xyz="0.04 -0.018 0.073356707952" rpy="0 0 0" />
+    <parent link="link1_1" />
+    <child link="link2_1" />
+    <axis xyz="3.7576779295e-14 -1 3.11848821907e-14" />
+    <limit effort="4.903" velocity="7.874" lower="-2.32128790515" upper="1.58824961931" />
+  </joint>
+  <joint name="link2_to_link3" type="revolute">
+    <origin xyz="3.39589458789e-05 0.035999879491 0.113000833762" rpy="0 0 0" />
+    <parent link="link2_1" />
+    <child link="link3_1" />
+    <axis xyz="5.4643524895e-08 -1 3.71447673953e-08" />
+    <limit effort="4.903" velocity="7.874" lower="-1.57079632679" upper="2.67035375555" />
+  </joint>
+  <joint name="link3_to_link4" type="revolute">
+    <origin xyz="0.135059233654 -2.61233757511e-07 0.0336375809223" rpy="0 0 0" />
+    <parent link="link3_1" />
+    <child link="link4_1" />
+    <axis xyz="-5.21611917629e-08 1 -3.41984371354e-08" />
+    <limit effort="2.942" velocity="4.717" lower="-1.72787595947" upper="1.69296937443" />
+  </joint>
+  <joint name="link4_to_link5" type="revolute">
+    <origin xyz="0.0591945817497 -0.0180002669618 -4.03637807994e-05" rpy="0 0 0" />
+    <parent link="link4_1" />
+    <child link="link5_1" />
+    <axis xyz="-1 -4.90398764451e-08 1.40482066922e-10" />
+    <limit effort="2.942" velocity="4.717" lower="-2.87979326579" upper="2.84488668075" />
+  </joint>
+  <joint name="clamp1" type="prismatic">
+    <origin xyz="0.0639999993385 0.0165020797222 0.0159979235363" rpy="0 0 0" />
+    <parent link="link5_1" />
+    <child link="clamp1_1" />
+    <axis xyz="-5.21612507542e-08 1 4.50838078172e-08" />
+    <limit effort="408.6" velocity="0.0340" lower="0" upper="0.0415" />
+  </joint>
+  <joint name="clamp2" type="prismatic">
+    <origin xyz="0.0640000007627 -0.0154979202778 0.0159979219163" rpy="0 0 0" />
+    <parent link="link5_1" />
+    <child link="clamp2_1" />
+    <axis xyz="-4.9039873492e-08 1 4.73420869362e-08" />
+    <limit effort="408.6" velocity="0.0340" lower="-0.0415" upper="3.46944695195e-17" />
+    <mimic joint="clamp1" multiplier="-1" offset="0" />
+  </joint>
+</robot>

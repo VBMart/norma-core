@@ -36,5 +36,14 @@
   "devices/so101/assets/wrist_roll_follower_so101_v1.stl": "364b4ebd",
   "devices/so101/assets/wrist_roll_pitch_so101_v2.stl": "b4884621",
   "devices/so101/so101_robot_follower.urdf": "9f6d1277",
-  "devices/so101/so101_robot_leader.urdf": "d801886d"
+  "devices/so101/so101_robot_leader.urdf": "d801886d",
+  "devices/so102/assets/base_link.stl": "0e72fff0",
+  "devices/so102/assets/clamp1_1.stl": "9f313cc4",
+  "devices/so102/assets/clamp2_1.stl": "dbae2916",
+  "devices/so102/assets/link1_1.stl": "9cdaf858",
+  "devices/so102/assets/link2_1.stl": "9ccc113b",
+  "devices/so102/assets/link3_1.stl": "bafb0ade",
+  "devices/so102/assets/link4_1.stl": "e5018a8c",
+  "devices/so102/assets/link5_1.stl": "ad4b7212",
+  "devices/so102/so102_robot_follower.urdf": "86731f59"
 }

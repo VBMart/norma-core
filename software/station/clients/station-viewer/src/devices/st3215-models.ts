@@ -2,7 +2,7 @@ import type { st3215 } from '@/api/proto.js';
 import type { St3215Kinematics, St3215Model } from './st3215-model';
 
 function createSt3215ModelCatalog(models: readonly St3215Model[]) {
-  const modelsByMotorCount = new Map<number, St3215Model>();
+  const modelsByMotorCount = new Map<number, St3215Model[]>();
   const modelIds = new Set<string>();
 
   for (const model of models) {
@@ -15,24 +15,55 @@ function createSt3215ModelCatalog(models: readonly St3215Model[]) {
     if (!Number.isInteger(model.motorCount) || model.motorCount <= 0) {
       throw new Error(`ST3215 model ${model.id} has an invalid motor count.`);
     }
-    if (modelsByMotorCount.has(model.motorCount)) {
-      throw new Error(
-        `ST3215 motor count ${model.motorCount} is ambiguous; add an explicit model identity before registering another model with that count.`,
-      );
-    }
 
     modelIds.add(model.id);
-    modelsByMotorCount.set(model.motorCount, model);
+    const group = modelsByMotorCount.get(model.motorCount) ?? [];
+    group.push(model);
+    modelsByMotorCount.set(model.motorCount, group);
+  }
+
+  for (const [motorCount, group] of modelsByMotorCount) {
+    const defaults = group.filter((model) => model.defaultForMotorCount);
+    if (group.length > 1 && defaults.length !== 1) {
+      throw new Error(
+        `ST3215 motor count ${motorCount} is shared by ${group.map((model) => model.id).join(', ')}; exactly one of them must set defaultForMotorCount.`,
+      );
+    }
+    // Default first, then registration order, so option lists are stable.
+    group.sort((a, b) => Number(b.defaultForMotorCount) - Number(a.defaultForMotorCount));
+  }
+
+  function pick<T>(candidates: readonly T[], preferredModelId: string | null | undefined, idOf: (candidate: T) => string): T | null {
+    if (candidates.length === 0) {
+      return null;
+    }
+    if (preferredModelId) {
+      const preferred = candidates.find((candidate) => idOf(candidate) === preferredModelId);
+      if (preferred) {
+        return preferred;
+      }
+    }
+    return candidates[0];
   }
 
   return {
-    resolveBus(bus: st3215.InferenceState.IBusState): St3215Model | null {
-      const model = modelsByMotorCount.get(bus.motors?.length ?? 0);
-      return model?.supportsBus(bus) ? model : null;
+    listModels(bus: st3215.InferenceState.IBusState): St3215Model[] {
+      const group = modelsByMotorCount.get(bus.motors?.length ?? 0) ?? [];
+      return group.filter((model) => model.supportsBus(bus));
     },
-    resolveJointCount(jointCount: number): St3215Kinematics | null {
-      const model = modelsByMotorCount.get(jointCount);
-      return model?.supportsJointCount(jointCount) ? model.kinematics : null;
+    resolveBus(
+      bus: st3215.InferenceState.IBusState,
+      preferredModelId?: string | null,
+    ): St3215Model | null {
+      return pick(this.listModels(bus), preferredModelId, (model) => model.id);
+    },
+    resolveJointCount(
+      jointCount: number,
+      preferredModelId?: string | null,
+    ): St3215Kinematics | null {
+      const group = modelsByMotorCount.get(jointCount) ?? [];
+      const candidates = group.filter((model) => model.supportsJointCount(jointCount));
+      return pick(candidates, preferredModelId, (model) => model.id)?.kinematics ?? null;
     },
   };
 }
@@ -46,10 +77,25 @@ const st3215ModelCatalog = createSt3215ModelCatalog(
   Object.values(st3215ModelEntries).map((entry) => entry.default),
 );
 
+/**
+ * Every registered model that can render this bus. More than one entry means
+ * the bus is ambiguous (same motor count) and the user has to choose.
+ */
+export function listSt3215Models(
+  bus: st3215.InferenceState.IBusState,
+): St3215Model[] {
+  return st3215ModelCatalog.listModels(bus);
+}
+
+/**
+ * The model to render for this bus: the preferred one when it fits the bus,
+ * otherwise the default for its motor count.
+ */
 export function resolveSt3215Model(
   bus: st3215.InferenceState.IBusState,
+  preferredModelId?: string | null,
 ): St3215Model | null {
-  return st3215ModelCatalog.resolveBus(bus);
+  return st3215ModelCatalog.resolveBus(bus, preferredModelId);
 }
 
 export function supportsSt3215Bus(bus: st3215.InferenceState.IBusState): boolean {
@@ -58,6 +104,7 @@ export function supportsSt3215Bus(bus: st3215.InferenceState.IBusState): boolean
 
 export function resolveSt3215Kinematics(
   jointCount: number,
+  preferredModelId?: string | null,
 ): St3215Kinematics | null {
-  return st3215ModelCatalog.resolveJointCount(jointCount);
+  return st3215ModelCatalog.resolveJointCount(jointCount, preferredModelId);
 }

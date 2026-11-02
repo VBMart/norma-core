@@ -12,6 +12,9 @@ export default st3215Model({
   id: SO101_DEVICE_ID,
   label: 'SO101',
   motorCount: SO101_MOTOR_COUNT,
+  // SO101 and SO102 leaders are both six STS3215s; SO101 stays the default
+  // until the user picks a model for the bus.
+  defaultForMotorCount: true,
   kinematics: {
     urdfPath: resolveSo101UrdfPath(false),
     basePos: so101BasePos,

@@ -17,6 +17,11 @@ export interface St3215Model {
   id: string;
   label: string;
   motorCount: number;
+  /**
+   * Picked when several registered models share this motor count and the
+   * user has not chosen one. Exactly one model per ambiguous count sets it.
+   */
+  defaultForMotorCount: boolean;
   kinematics: St3215Kinematics;
   loadRenderer: () => Promise<{ default: St3215RobotRendererComponent }>;
   supportsBus: (bus: st3215.InferenceState.IBusState) => boolean;
@@ -27,6 +32,7 @@ interface St3215ModelDefinition {
   id: string;
   label: string;
   motorCount: number;
+  defaultForMotorCount?: boolean;
   kinematics: St3215Kinematics;
   loadRenderer: St3215Model['loadRenderer'];
   matchesBus?: (bus: st3215.InferenceState.IBusState) => boolean;
@@ -37,6 +43,7 @@ export function st3215Model(definition: St3215ModelDefinition): St3215Model {
     id: definition.id,
     label: definition.label,
     motorCount: definition.motorCount,
+    defaultForMotorCount: definition.defaultForMotorCount ?? false,
     kinematics: definition.kinematics,
     loadRenderer: definition.loadRenderer,
     supportsBus: (bus) =>

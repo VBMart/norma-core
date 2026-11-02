@@ -3,7 +3,8 @@ import Long from 'long';
 import { Camera } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { commandManager } from '@/api/commands';
-import { supportsSt3215Bus } from '@/devices/st3215-models';
+import { useSt3215ModelSelection } from '@/devices/st3215-model-selection';
+import { listSt3215Models, resolveSt3215Model, supportsSt3215Bus } from '@/devices/st3215-models';
 import { FrameEntry } from '@/api/frame-parser';
 import { useElementFullscreen } from '@/hooks/useElementFullscreen';
 import { motors_mirroring, st3215, usbvideo } from '@/api/proto.js';
@@ -386,6 +387,11 @@ const BusCard: React.FC<BusCardProps> = ({
     );
   const needsCalibration = hasMotors && (hasUnfrozenMotor || hasNarrowRange);
   const canRender3d = supportsSt3215Bus(bus);
+  // Several registered models can share a motor count (SO101 and SO102
+  // leaders are both six STS3215s); the user picks one per bus.
+  const [selectedModelId, setSelectedModelId] = useSt3215ModelSelection(bus.bus?.serialNumber);
+  const modelOptions = listSt3215Models(bus);
+  const activeModelId = resolveSt3215Model(bus, selectedModelId)?.id ?? "";
   const canShowCamera = activeVideoSources.length > 0;
 
   useEffect(() => {
@@ -421,6 +427,22 @@ const BusCard: React.FC<BusCardProps> = ({
           <span className="font-bold text-lg text-accent-data">
             #{bus.bus?.serialNumber}
           </span>
+          {modelOptions.length > 1 && (
+            <select
+              value={activeModelId}
+              onChange={(e) => setSelectedModelId(e.target.value || null)}
+              disabled={!busSerialNumber}
+              className={`${selectControlClass} max-w-[140px] disabled:cursor-not-allowed disabled:opacity-60`}
+              title="Robot model"
+              aria-label="Robot model"
+            >
+              {modelOptions.map((model) => (
+                <option key={model.id} value={model.id}>
+                  {model.label}
+                </option>
+              ))}
+            </select>
+          )}
           <div className="flex rounded-md border border-border-subtle bg-surface-primary p-0.5">
             <button
               type="button"

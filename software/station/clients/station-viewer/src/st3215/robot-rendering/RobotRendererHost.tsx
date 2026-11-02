@@ -1,4 +1,5 @@
 import { forwardRef, lazy, memo, Suspense, useImperativeHandle, useMemo, useRef } from 'react';
+import { useSt3215ModelSelection } from '@/devices/st3215-model-selection';
 import { resolveSt3215Model } from '@/devices/st3215-models';
 import type {
   BaseRobotRendererRef,
@@ -9,7 +10,8 @@ const RobotRendererHostComponent = forwardRef<BaseRobotRendererRef, St3215RobotR
   function RobotRendererHost(props, ref) {
     const childRef = useRef<BaseRobotRendererRef>(null);
     const motorCount = props.bus.motors?.length ?? 0;
-    const model = resolveSt3215Model(props.bus);
+    const [selectedModelId] = useSt3215ModelSelection(props.busSerialNumber);
+    const model = resolveSt3215Model(props.bus, selectedModelId);
     // Registry entries are module-scope objects, so this identity is stable
     // while the matched device stays the same.
     const LazyRenderer = useMemo(
