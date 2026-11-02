@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { st3215 } from '@/api/proto.js';
 import {
+  detectSt3215Model,
   listSt3215Models,
   resolveSt3215Kinematics,
   resolveSt3215Model,
@@ -50,5 +51,53 @@ describe('ST3215 model catalog', () => {
     expect(resolveSt3215Kinematics(6, 'so102')?.urdfPath).toContain('so102');
     expect(resolveSt3215Kinematics(8)?.urdfPath).toContain('elrobot');
     expect(resolveSt3215Kinematics(7)).toBeNull();
+  });
+});
+
+describe('SO-ARM detection from the base motor calibration', () => {
+  function makeSoArmBus(
+    base: { rangeMin: number; rangeMax: number; rangeFreezed?: boolean },
+  ): st3215.InferenceState.IBusState {
+    const bus = makeBus(6);
+    bus.motors![0] = { id: 1, rangeFreezed: true, ...base };
+    return bus;
+  }
+
+  it('is undecided before calibration is frozen', () => {
+    expect(detectSt3215Model(makeBus(6))).toBeNull();
+    expect(detectSt3215Model(makeSoArmBus({ rangeMin: 50, rangeMax: 4050, rangeFreezed: false }))).toBeNull();
+    expect(resolveSt3215Model(makeSoArmBus({ rangeMin: 50, rangeMax: 4050, rangeFreezed: false }), 'so101')?.id).toBe('so101');
+  });
+
+  it('is undecided when the base range is collapsed or too narrow', () => {
+    expect(detectSt3215Model(makeSoArmBus({ rangeMin: 2000, rangeMax: 2000 }))).toBeNull();
+    expect(detectSt3215Model(makeSoArmBus({ rangeMin: 2000, rangeMax: 2050 }))).toBeNull();
+  });
+
+  it('identifies SO101 from a ~220 degree base sweep, whatever was selected', () => {
+    const bus = makeSoArmBus({ rangeMin: 800, rangeMax: 3300 });
+    expect(detectSt3215Model(bus)?.id).toBe('so101');
+    expect(resolveSt3215Model(bus, 'so102')?.id).toBe('so101');
+  });
+
+  it('identifies SO102 from a ~352 degree base sweep, whatever was selected', () => {
+    const bus = makeSoArmBus({ rangeMin: 50, rangeMax: 4050 });
+    expect(detectSt3215Model(bus)?.id).toBe('so102');
+    expect(resolveSt3215Model(bus, 'so101')?.id).toBe('so102');
+    expect(resolveSt3215Model(bus)?.id).toBe('so102');
+  });
+
+  it('measures a range that wraps past 4095 correctly', () => {
+    // 3000 -> 4095 -> 0 -> 2900 is 3996 ticks, an SO102 sweep.
+    expect(detectSt3215Model(makeSoArmBus({ rangeMin: 3000, rangeMax: 2900 }))?.id).toBe('so102');
+    // 3500 -> 4095 -> 0 -> 1900 is 2496 ticks, an SO101 sweep.
+    expect(detectSt3215Model(makeSoArmBus({ rangeMin: 3500, rangeMax: 1900 }))?.id).toBe('so101');
+  });
+
+  it('never detects an arm on buses with other motor counts', () => {
+    const bus = makeBus(8);
+    bus.motors![0] = { id: 1, rangeMin: 50, rangeMax: 4050, rangeFreezed: true };
+    expect(detectSt3215Model(bus)).toBeNull();
+    expect(resolveSt3215Model(bus)?.id).toBe('elrobot');
   });
 });

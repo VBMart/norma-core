@@ -51,11 +51,16 @@ function createSt3215ModelCatalog(models: readonly St3215Model[]) {
       const group = modelsByMotorCount.get(bus.motors?.length ?? 0) ?? [];
       return group.filter((model) => model.supportsBus(bus));
     },
+    detectBus(bus: st3215.InferenceState.IBusState): St3215Model | null {
+      const detected = this.listModels(bus).filter((model) => model.detectsBus(bus));
+      return detected.length === 1 ? detected[0] : null;
+    },
     resolveBus(
       bus: st3215.InferenceState.IBusState,
       preferredModelId?: string | null,
     ): St3215Model | null {
-      return pick(this.listModels(bus), preferredModelId, (model) => model.id);
+      return this.detectBus(bus)
+        ?? pick(this.listModels(bus), preferredModelId, (model) => model.id);
     },
     resolveJointCount(
       jointCount: number,
@@ -88,8 +93,19 @@ export function listSt3215Models(
 }
 
 /**
- * The model to render for this bus: the preferred one when it fits the bus,
- * otherwise the default for its motor count.
+ * The model the bus data identifies on its own (for SO-ARMs, from the base
+ * motor's frozen calibration range), or null while it is undecided.
+ */
+export function detectSt3215Model(
+  bus: st3215.InferenceState.IBusState,
+): St3215Model | null {
+  return st3215ModelCatalog.detectBus(bus);
+}
+
+/**
+ * The model to render for this bus: the detected one when the bus data is
+ * conclusive, else the preferred one when it fits, else the default for its
+ * motor count.
  */
 export function resolveSt3215Model(
   bus: st3215.InferenceState.IBusState,

@@ -25,6 +25,11 @@ export interface St3215Model {
   kinematics: St3215Kinematics;
   loadRenderer: () => Promise<{ default: St3215RobotRendererComponent }>;
   supportsBus: (bus: st3215.InferenceState.IBusState) => boolean;
+  /**
+   * True when bus data positively identifies this model (not just a
+   * compatible motor count). A detected model beats the user's selection.
+   */
+  detectsBus: (bus: st3215.InferenceState.IBusState) => boolean;
   supportsJointCount: (jointCount: number) => boolean;
 }
 
@@ -36,6 +41,7 @@ interface St3215ModelDefinition {
   kinematics: St3215Kinematics;
   loadRenderer: St3215Model['loadRenderer'];
   matchesBus?: (bus: st3215.InferenceState.IBusState) => boolean;
+  detectBus?: (bus: st3215.InferenceState.IBusState) => boolean;
 }
 
 export function st3215Model(definition: St3215ModelDefinition): St3215Model {
@@ -49,6 +55,9 @@ export function st3215Model(definition: St3215ModelDefinition): St3215Model {
     supportsBus: (bus) =>
       (bus.motors?.length ?? 0) === definition.motorCount
       && (definition.matchesBus?.(bus) ?? true),
+    detectsBus: (bus) =>
+      (bus.motors?.length ?? 0) === definition.motorCount
+      && (definition.detectBus?.(bus) ?? false),
     supportsJointCount: (jointCount) => jointCount === definition.motorCount,
   };
 }

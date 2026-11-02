@@ -4,7 +4,7 @@ import { Camera } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { commandManager } from '@/api/commands';
 import { useSt3215ModelSelection } from '@/devices/st3215-model-selection';
-import { listSt3215Models, resolveSt3215Model, supportsSt3215Bus } from '@/devices/st3215-models';
+import { detectSt3215Model, listSt3215Models, resolveSt3215Model, supportsSt3215Bus } from '@/devices/st3215-models';
 import { FrameEntry } from '@/api/frame-parser';
 import { useElementFullscreen } from '@/hooks/useElementFullscreen';
 import { motors_mirroring, st3215, usbvideo } from '@/api/proto.js';
@@ -388,9 +388,11 @@ const BusCard: React.FC<BusCardProps> = ({
   const needsCalibration = hasMotors && (hasUnfrozenMotor || hasNarrowRange);
   const canRender3d = supportsSt3215Bus(bus);
   // Several registered models can share a motor count (SO101 and SO102
-  // leaders are both six STS3215s); the user picks one per bus.
+  // leaders are both six STS3215s). The user picks one per bus until the
+  // frozen calibration of motor 1 identifies the arm on its own.
   const [selectedModelId, setSelectedModelId] = useSt3215ModelSelection(bus.bus?.serialNumber);
   const modelOptions = listSt3215Models(bus);
+  const detectedModel = detectSt3215Model(bus);
   const activeModelId = resolveSt3215Model(bus, selectedModelId)?.id ?? "";
   const canShowCamera = activeVideoSources.length > 0;
 
@@ -431,9 +433,9 @@ const BusCard: React.FC<BusCardProps> = ({
             <select
               value={activeModelId}
               onChange={(e) => setSelectedModelId(e.target.value || null)}
-              disabled={!busSerialNumber}
+              disabled={!busSerialNumber || detectedModel !== null}
               className={`${selectControlClass} max-w-[140px] disabled:cursor-not-allowed disabled:opacity-60`}
-              title="Robot model"
+              title={detectedModel ? `${detectedModel.label} detected from the motor 1 calibration range` : "Robot model"}
               aria-label="Robot model"
             >
               {modelOptions.map((model) => (
