@@ -5,26 +5,32 @@ import type {
   St3215RobotRendererProps,
 } from '@/st3215/robot-rendering/types';
 import {
+  resolveSo102JointNames,
+  resolveSo102JointValue,
+  resolveSo102MotorMaterialIndex,
+  resolveSo102UrdfPath,
   so102BasePos,
   so102BaseRpy,
-  so102JointNames,
-  so102UrdfPath,
 } from './config';
 
-// The SO102 URDF uses one shared material, so motors cannot be coloured by
-// status the way SO101/ElRobot are; no material resolver is passed.
 const SO102DeviceRenderer = forwardRef<BaseRobotRendererRef, St3215RobotRendererProps>(
   function SO102DeviceRenderer({ busSerialNumber, bus, isLeader }, ref) {
+    // Nothing identifies a follower yet (that needs the motor models on the
+    // bus), and the six-STS3215 buses we can recognise today are leaders, so
+    // an unspecified role renders the leader.
+    const leader = isLeader ?? true;
     return (
       <BaseRobotRenderer
         ref={ref}
         busSerialNumber={busSerialNumber}
         bus={bus}
-        isLeader={isLeader}
-        urdfPath={so102UrdfPath}
-        jointNames={so102JointNames}
+        isLeader={leader}
+        urdfPath={resolveSo102UrdfPath(leader)}
+        jointNames={resolveSo102JointNames(leader)}
         basePos={so102BasePos}
         baseRpy={so102BaseRpy}
+        resolveMotorMaterialIndex={resolveSo102MotorMaterialIndex}
+        resolveJointValue={resolveSo102JointValue}
       />
     );
   },

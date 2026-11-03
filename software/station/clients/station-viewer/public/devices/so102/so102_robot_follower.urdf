@@ -1,11 +1,29 @@
 <?xml version="1.0" ?>
 <!-- SO-ARM 102 follower arm, Robonine (https://github.com/roboninecom/SO-ARM102) -->
-<!-- Source: simulation/urdf/so_arm_102.urdf and simulation/urdf/meshes/*.stl at commit f0a993e -->
-<!-- Licence: CC-BY-4.0 (simulation assets), see the repository's LICENSING.md -->
-<!-- Changes for the station viewer: fitted-box <collision> elements removed (unused by the viewer), mesh paths moved from meshes/ to assets/ -->
+<!-- Source: simulation/urdf/so_arm_102.urdf, simulation/urdf/meshes/*.stl and models/stl/SO-ARM102_Follower.STL at commit f0a993e -->
+<!-- Licence: CC-BY-4.0 (simulation assets) / CERN-OHL-P-2.0 (models), see the repository's LICENSING.md -->
+<!-- Changes for the station viewer: collision boxes removed; each link mesh split into a frame mesh and one mesh per servo so motors can be coloured by status -->
 <robot name="so_arm_102_pre_for_urdf_v5">
   <material name="silver">
-    <color rgba="0.700 0.700 0.700 1.000" />
+    <color rgba="0.7 0.7 0.7 1.0" />
+  </material>
+  <material name="so102_motor_1_material">
+    <color rgba="0 0 0 1.0" />
+  </material>
+  <material name="so102_motor_2_material">
+    <color rgba="0 0 0 1.0" />
+  </material>
+  <material name="so102_motor_3_material">
+    <color rgba="0 0 0 1.0" />
+  </material>
+  <material name="so102_motor_4_material">
+    <color rgba="0 0 0 1.0" />
+  </material>
+  <material name="so102_motor_5_material">
+    <color rgba="0 0 0 1.0" />
+  </material>
+  <material name="so102_motor_6_material">
+    <color rgba="0 0 0 1.0" />
   </material>
   <link name="base_link">
     <inertial>
@@ -30,9 +48,16 @@
     <visual>
       <origin xyz="0.006 1.10978314851e-16 -0.025" rpy="0 0 0" />
       <geometry>
-        <mesh filename="assets/link1_1.stl" scale="0.001 0.001 0.001" />
+        <mesh filename="assets/link1_1_frame.stl" scale="0.001 0.001 0.001" />
       </geometry>
       <material name="silver" />
+    </visual>
+    <visual>
+      <origin xyz="0.006 1.10978314851e-16 -0.025" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="assets/motor_1.stl" scale="0.001 0.001 0.001" />
+      </geometry>
+      <material name="so102_motor_1_material" />
     </visual>
   </link>
   <link name="link2_1">
@@ -44,9 +69,23 @@
     <visual>
       <origin xyz="-0.034 0.018 -0.098356707952" rpy="0 0 0" />
       <geometry>
-        <mesh filename="assets/link2_1.stl" scale="0.001 0.001 0.001" />
+        <mesh filename="assets/link2_1_frame.stl" scale="0.001 0.001 0.001" />
       </geometry>
       <material name="silver" />
+    </visual>
+    <visual>
+      <origin xyz="-0.034 0.018 -0.098356707952" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="assets/motor_2.stl" scale="0.001 0.001 0.001" />
+      </geometry>
+      <material name="so102_motor_2_material" />
+    </visual>
+    <visual>
+      <origin xyz="-0.034 0.018 -0.098356707952" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="assets/motor_3.stl" scale="0.001 0.001 0.001" />
+      </geometry>
+      <material name="so102_motor_3_material" />
     </visual>
   </link>
   <link name="link3_1">
@@ -58,9 +97,16 @@
     <visual>
       <origin xyz="-0.0340339589459 -0.017999879491 -0.211357541714" rpy="0 0 0" />
       <geometry>
-        <mesh filename="assets/link3_1.stl" scale="0.001 0.001 0.001" />
+        <mesh filename="assets/link3_1_frame.stl" scale="0.001 0.001 0.001" />
       </geometry>
       <material name="silver" />
+    </visual>
+    <visual>
+      <origin xyz="-0.0340339589459 -0.017999879491 -0.211357541714" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="assets/motor_4.stl" scale="0.001 0.001 0.001" />
+      </geometry>
+      <material name="so102_motor_4_material" />
     </visual>
   </link>
   <link name="link4_1">
@@ -72,9 +118,16 @@
     <visual>
       <origin xyz="-0.1690931926 -0.0179996182572 -0.244995122636" rpy="0 0 0" />
       <geometry>
-        <mesh filename="assets/link4_1.stl" scale="0.001 0.001 0.001" />
+        <mesh filename="assets/link4_1_frame.stl" scale="0.001 0.001 0.001" />
       </geometry>
       <material name="silver" />
+    </visual>
+    <visual>
+      <origin xyz="-0.1690931926 -0.0179996182572 -0.244995122636" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="assets/motor_5.stl" scale="0.001 0.001 0.001" />
+      </geometry>
+      <material name="so102_motor_5_material" />
     </visual>
   </link>
   <link name="link5_1">
@@ -86,9 +139,16 @@
     <visual>
       <origin xyz="-0.22828777435 6.48704621215e-07 -0.244954758855" rpy="0 0 0" />
       <geometry>
-        <mesh filename="assets/link5_1.stl" scale="0.001 0.001 0.001" />
+        <mesh filename="assets/link5_1_frame.stl" scale="0.001 0.001 0.001" />
       </geometry>
       <material name="silver" />
+    </visual>
+    <visual>
+      <origin xyz="-0.22828777435 6.48704621215e-07 -0.244954758855" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="assets/motor_6.stl" scale="0.001 0.001 0.001" />
+      </geometry>
+      <material name="so102_motor_6_material" />
     </visual>
   </link>
   <link name="clamp1_1">
