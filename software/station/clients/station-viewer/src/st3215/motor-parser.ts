@@ -1,5 +1,7 @@
 import { st3215 } from '../api/proto';
 
+// Feetech STS/SMS memory table: firmware at 0x00..0x02, model number (LE) at 0x03.
+const ADDR_MODEL_NUMBER = 0x03;
 const ADDR_MIDPOINT = 0x1F;
 export const ADDR_TORQUE_ENABLE = 0x28;
 export const ADDR_GOAL_POSITION = 0x2A;
@@ -37,6 +39,14 @@ export function getEffectiveMotorRange(
   }
 
   return { min: rawMin, max: rawMax, isFallback: false };
+}
+
+/** Servo model number from the memory snapshot, or null when the snapshot is too short. */
+export function getMotorModelNumber(data: Uint8Array): number | null {
+  if (data.length < ADDR_MODEL_NUMBER + 2) {
+    return null;
+  }
+  return data[ADDR_MODEL_NUMBER] | (data[ADDR_MODEL_NUMBER + 1] << 8);
 }
 
 export function getMotorPosition(data: Uint8Array): number {

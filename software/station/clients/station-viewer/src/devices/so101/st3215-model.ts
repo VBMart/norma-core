@@ -1,4 +1,4 @@
-import { classifySoArmBase } from '@/devices/so-arm-detection';
+import { classifySoArm } from '@/devices/so-arm-detection';
 import { st3215Model } from '@/devices/st3215-model';
 import {
   SO101_DEVICE_ID,
@@ -23,5 +23,5 @@ export default st3215Model({
     jointNames: so101JointNames,
   },
   loadRenderer: () => import('./Renderer'),
-  detectBus: (bus) => classifySoArmBase(bus) === 'so101',
+  detectBus: (bus) => classifySoArm(bus) === 'so101',
 });

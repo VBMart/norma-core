@@ -1,3 +1,5 @@
+import type { st3215 } from '@/api/proto.js';
+import { isSo102FollowerBus } from '@/devices/so-arm-detection';
 import type {
   JointValueContext,
   MotorMaterialContext,
@@ -32,6 +34,17 @@ const SO102_ARM_JOINT_NAMES = [
 // resolveSo102JointValue (plain joint names bypass the resolver).
 export const so102FollowerJointNames: RobotJointNames = [...SO102_ARM_JOINT_NAMES, ['clamp1']];
 export const so102LeaderJointNames: RobotJointNames = [...SO102_ARM_JOINT_NAMES, ['trigger']];
+
+/**
+ * Leader unless the caller says otherwise or the bus carries follower servos
+ * (STS3235/STS3250); a six-STS3215 bus recognised as SO102 is a leader.
+ */
+export function resolveSo102IsLeader(
+  bus: st3215.InferenceState.IBusState,
+  isLeader?: boolean,
+): boolean {
+  return isLeader ?? !isSo102FollowerBus(bus);
+}
 
 export function resolveSo102JointNames(isLeader: boolean): RobotJointNames {
   return isLeader ? so102LeaderJointNames : so102FollowerJointNames;

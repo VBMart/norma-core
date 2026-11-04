@@ -435,7 +435,7 @@ const BusCard: React.FC<BusCardProps> = ({
               onChange={(e) => setSelectedModelId(e.target.value || null)}
               disabled={!busSerialNumber || detectedModel !== null}
               className={`${selectControlClass} max-w-[140px] disabled:cursor-not-allowed disabled:opacity-60`}
-              title={detectedModel ? `${detectedModel.label} detected from the motor 1 calibration range` : "Robot model"}
+              title={detectedModel ? `${detectedModel.label} detected from the motors on the bus` : "Robot model"}
               aria-label="Robot model"
             >
               {modelOptions.map((model) => (

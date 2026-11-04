@@ -5,6 +5,7 @@ import type {
   St3215RobotRendererProps,
 } from '@/st3215/robot-rendering/types';
 import {
+  resolveSo102IsLeader,
   resolveSo102JointNames,
   resolveSo102JointValue,
   resolveSo102MotorMaterialIndex,
@@ -15,10 +16,7 @@ import {
 
 const SO102DeviceRenderer = forwardRef<BaseRobotRendererRef, St3215RobotRendererProps>(
   function SO102DeviceRenderer({ busSerialNumber, bus, isLeader }, ref) {
-    // Nothing identifies a follower yet (that needs the motor models on the
-    // bus), and the six-STS3215 buses we can recognise today are leaders, so
-    // an unspecified role renders the leader.
-    const leader = isLeader ?? true;
+    const leader = resolveSo102IsLeader(bus, isLeader);
     return (
       <BaseRobotRenderer
         ref={ref}

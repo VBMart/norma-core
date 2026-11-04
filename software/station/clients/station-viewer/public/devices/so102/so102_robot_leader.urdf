@@ -179,8 +179,12 @@
     <axis xyz="-5.21611917629e-08 1 -3.41984371354e-08" />
     <limit effort="2.942" velocity="4.717" lower="-1.72787595947" upper="1.69296937443" />
   </joint>
+  <!-- Wrist roll: same axis and limits as the follower, so both arms map the
+       calibrated range to the same angles. The leader's handle sits half a turn
+       from the follower's gripper at the centre of the range, so the link 5
+       frame (handle, servo 6, trigger) is rolled 180 degrees about the joint axis. -->
   <joint name="link4_to_link5" type="revolute">
-    <origin xyz="0.0591945817497 -0.0180002669618 -4.03637807994e-05" rpy="0 0 0" />
+    <origin xyz="0.0591945817497 -0.0180002669618 -4.03637807994e-05" rpy="3.14159265359 0 0" />
     <parent link="link4_1" />
     <child link="link5_1" />
     <axis xyz="-1 -4.90398764451e-08 1.40482066922e-10" />

@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import type { st3215 } from '@/api/proto.js';
 import {
+  resolveSo102IsLeader,
   resolveSo102JointNames,
   resolveSo102JointValue,
   resolveSo102MotorMaterialIndex,
@@ -30,5 +32,31 @@ describe('SO102 config', () => {
     expect(resolveSo102MotorMaterialIndex({ materialName: 'so102_motor_6_material', motorCount: 6 })).toBe(5);
     expect(resolveSo102MotorMaterialIndex({ materialName: 'so102_motor_7_material', motorCount: 6 })).toBeNull();
     expect(resolveSo102MotorMaterialIndex({ materialName: 'silver', motorCount: 6 })).toBeNull();
+  });
+});
+
+describe('SO102 role from the bus', () => {
+  const snapshotWithModel = (model: number) => {
+    const data = new Uint8Array(0x47);
+    data[3] = model & 0xff;
+    data[4] = model >> 8;
+    return data;
+  };
+  const bus = (model: number): st3215.InferenceState.IBusState => ({
+    bus: { serialNumber: 'TEST' },
+    motors: Array.from({ length: 6 }, (_, index) => ({ id: index + 1, state: snapshotWithModel(index === 1 ? model : 777) })),
+  });
+
+  it('renders the follower when the bus carries an STS3250', () => {
+    expect(resolveSo102IsLeader(bus(2825))).toBe(false);
+  });
+
+  it('renders the leader for six STS3215s', () => {
+    expect(resolveSo102IsLeader(bus(777))).toBe(true);
+  });
+
+  it('lets an explicit role override the bus', () => {
+    expect(resolveSo102IsLeader(bus(2825), true)).toBe(true);
+    expect(resolveSo102IsLeader(bus(777), false)).toBe(false);
   });
 });
