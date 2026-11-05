@@ -261,14 +261,28 @@ impl St3215PortMeta {
                                 }
                             }).collect()
                         } else {
-                            log::info!("No arcs provided, calculating from motor_points");
+                            // Motors tracked since the last reset; on an already frozen bus
+                            // nothing was tracked, so fall back to the motors that have stored
+                            // bounds. Otherwise the meta envelope would carry no arcs and the
+                            // calibration would be lost at the next station start.
+                            let motor_ids: Vec<u32> = if motor_points.is_empty() {
+                                log::info!("No arcs provided and no tracked points, re-freezing stored bounds");
+                                comm.get_bounded_motor_ids(&target_serial)
+                            } else {
+                                log::info!("No arcs provided, calculating from motor_points");
+                                motor_points.keys().map(|id| *id as u32).collect()
+                            };
 
-                            // Original behavior: calculate from tracked motor_points
-                            motor_points
-                                .keys()
-                                .map(|motor_id| {
-                                    let bounds = comm.get_bounds(&target_serial, *motor_id as u32);
-                                    let (range_min, range_max, _) = bounds.unwrap();
+                            motor_ids
+                                .iter()
+                                .filter_map(|motor_id| {
+                                    let (range_min, range_max, _) = match comm.get_bounds(&target_serial, *motor_id) {
+                                        Some(b) => b,
+                                        None => {
+                                            log::warn!("Motor {}: no bounds to freeze, skipping", motor_id);
+                                            return None;
+                                        }
+                                    };
 
                                     let range = if range_min < range_max {
                                         range_max - range_min
@@ -287,19 +301,19 @@ impl St3215PortMeta {
 
                                     comm.update_bounds(
                                         &target_serial,
-                                        *motor_id as u32,
+                                        *motor_id,
                                         new_min,
                                         new_max,
                                         true,
                                     );
 
-                                    MotorArc {
-                                        motor_id: *motor_id as u32,
+                                    Some(MotorArc {
+                                        motor_id: *motor_id,
                                         min_angle: new_min,
                                         max_angle: new_max,
                                         range_freezed: true,
                                         positions: vec![],
-                                    }
+                                    })
                                 })
                                 .collect()
                         };

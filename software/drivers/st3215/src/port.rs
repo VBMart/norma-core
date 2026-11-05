@@ -523,6 +523,54 @@ impl St3215Port {
         }
     }
 
+    /// Servo model number (memory address 0x03, little-endian), or None when the read fails.
+    async fn read_model_number(
+        port: &mut tokio_serial::SerialStream,
+        motor_id: u8,
+    ) -> Option<u16> {
+        let read_req = protocol::ST3215Request::Read {
+            motor: motor_id,
+            address: protocol::MODEL_NUMBER_ADDR,
+            length: 2,
+        };
+        match read_req.async_readwrite(port, ST3215_COMMAND_TIMEOUT_MS).await {
+            Ok(protocol::ST3215Response::Read { data, .. }) if data.len() >= 2 => {
+                Some(u16::from_le_bytes([data[0], data[1]]))
+            }
+            Ok(_) => None,
+            Err(e) => {
+                warn!("Motor {}: model number read failed: {}", motor_id, e);
+                Self::drain_serial(port).await;
+                None
+            }
+        }
+    }
+
+    /// Current position offset (EEPROM 0x1F, signed, two's complement as the station writes it),
+    /// or None when the read fails.
+    async fn read_position_offset(
+        port: &mut tokio_serial::SerialStream,
+        motor_id: u8,
+    ) -> Option<i16> {
+        let register = protocol::EepromRegister::Offset;
+        let read_req = protocol::ST3215Request::Read {
+            motor: motor_id,
+            address: register.address(),
+            length: register.size(),
+        };
+        match read_req.async_readwrite(port, ST3215_COMMAND_TIMEOUT_MS).await {
+            Ok(protocol::ST3215Response::Read { data, .. }) if data.len() >= 2 => {
+                Some(i16::from_le_bytes([data[0], data[1]]))
+            }
+            Ok(_) => None,
+            Err(e) => {
+                warn!("Motor {}: position offset read failed: {}", motor_id, e);
+                Self::drain_serial(port).await;
+                None
+            }
+        }
+    }
+
     async fn read_motor_ram(
         port: &mut tokio_serial::SerialStream,
         motor_id: u8,
@@ -864,8 +912,20 @@ impl St3215Port {
             } else {
                 MAX_MOTORS_CNT
             };
+            // Motors the robot actually has (6 = SO arm, 8 = ElRobot): from the arcs when the
+            // auto-calibrator sends them, otherwise from the stored calibration bounds.
+            let robot_motor_count = if !freeze_cmd.arcs.is_empty() {
+                freeze_cmd.arcs.len() as u8
+            } else {
+                meta.get_communicator().get_bounded_motor_ids(&bus_info.serial_number).len() as u8
+            };
 
             for motor_id in 1..=max_motors_cnt {
+                // The reset below is the Feetech RECOVERY instruction (0x06): it restores the
+                // factory control table, including the position offset. Read the offset first
+                // so a re-freeze of an already frozen bus can carry it forward.
+                let prior_offset = Self::read_position_offset(port, motor_id).await.unwrap_or(0);
+
                 // Send hardware reset without unlocking EEPROM
                 let reset_req = protocol::ST3215Request::Reset { motor: motor_id };
                 if let Err(e) = reset_req.async_readwrite(port, ST3215_COMMAND_TIMEOUT_MS).await {
@@ -873,9 +933,9 @@ impl St3215Port {
                 } else {
                     info!("FreezeCalibration: Hardware reset completed for motor {}", motor_id);
                 }
-                
+
                 let provided_midpoint = midpoints.get(&motor_id).copied();
-                match Self::freeze_calibration(port, motor_id, meta, bus_info, provided_midpoint, max_motors_cnt).await {
+                match Self::freeze_calibration(port, motor_id, meta, bus_info, provided_midpoint, prior_offset, max_motors_cnt, robot_motor_count).await {
                     Ok(verified) => {
                         if !verified {
                             warn!(
@@ -1205,17 +1265,23 @@ impl St3215Port {
         meta: &St3215PortMeta,
         bus_info: &St3215BusProto,
         provided_midpoint: Option<u16>,
+        prior_offset: i16,
         max_motors_cnt: u8,
+        robot_motor_count: u8,
     ) -> Result<bool, protocol::Error> {
-        // 1. Get midpoint - use provided if available, otherwise calculate
-        let midpoint = if let Some(mp) = provided_midpoint {
+        // 1. Get midpoint - use provided if available, otherwise calculate.
+        // A provided midpoint (auto-calibration arcs) is measured with the offset zeroed, so
+        // it is absolute. A midpoint from the stored bounds is in the servo's offset-applied
+        // frame, so the new offset is cumulative: re-freezing an already frozen bus sees a
+        // midpoint of 2048 and must keep the offset the servo had before the reset.
+        let (midpoint, base_offset) = if let Some(mp) = provided_midpoint {
             info!("Motor {}: Using provided midpoint {}", motor_id, mp);
-            mp
+            (mp, 0i16)
         } else {
             match meta.get_midpoint(motor_id) {
                 Some(mp) => {
-                    info!("Motor {}: Calculated midpoint {}", motor_id, mp);
-                    mp
+                    info!("Motor {}: Calculated midpoint {} (prior offset {})", motor_id, mp, prior_offset);
+                    (mp, prior_offset)
                 }
                 None => {
                     warn!(
@@ -1228,19 +1294,19 @@ impl St3215Port {
             }
         };
 
-        let mut correction = (midpoint as i16) - 2048;
+        let mut correction = base_offset as i32 + (midpoint as i32 - 2048);
 
         // Wrap offset to stay within -2047..2047 range
         if correction > 2047 {
-            correction = correction - 4096;
+            correction -= 4096;
         } else if correction < -2047 {
-            correction = correction + 4096;
+            correction += 4096;
         }
-        correction = correction.clamp(-2047, 2047);
+        let correction = correction.clamp(-2047, 2047) as i16;
 
         info!(
-            "bus: {}, motor: {}, midpoint: {}, correction: {}",
-            bus_info.serial_number, motor_id, midpoint, correction
+            "bus: {}, motor: {}, midpoint: {}, base offset: {}, correction: {}",
+            bus_info.serial_number, motor_id, midpoint, base_offset, correction
         );
 
         // 2. Unlock EPROM
@@ -1299,12 +1365,20 @@ impl St3215Port {
             Bytes::from_static(&[0]),
         )
         .await?;
+        // Torque and protection limits depend on the servo model and the robot
+        // (STS3250/3235 and ElRobot joint servos get full torque, grippers stay conservative).
+        let model = Self::read_model_number(port, motor_id).await;
+        let torque = torque_preset_for_motor(model, robot_motor_count, motor_id);
+        info!(
+            "Motor {}: model number {:?}, robot motors {}, torque preset {:?}",
+            motor_id, model, robot_motor_count, torque
+        );
         // Set Max Torque
         all_verified &= Self::reg_write_with_action(
             port,
             motor_id,
             protocol::EepromRegister::MaxTorque,
-            Bytes::copy_from_slice(&DEFAULT_MAX_TORQUE.to_le_bytes()),
+            Bytes::copy_from_slice(&torque.max_torque.to_le_bytes()),
         )
         .await?;
         // Set Protection Current
@@ -1312,7 +1386,7 @@ impl St3215Port {
             port,
             motor_id,
             protocol::EepromRegister::ProtectionCurrent,
-            Bytes::copy_from_slice(&DEFAULT_PROTECTION_CURRENT.to_le_bytes()),
+            Bytes::copy_from_slice(&torque.protection_current.to_le_bytes()),
         )
         .await?;
         // Set Overload Torque
@@ -1320,7 +1394,18 @@ impl St3215Port {
             port,
             motor_id,
             protocol::EepromRegister::OverloadTorque,
-            Bytes::from_static(&[DEFAULT_OVERLOAD_TORQUE]),
+            Bytes::from(vec![torque.overload_torque]),
+        )
+        .await?;
+
+        // Set Torque Limit in RAM: the servo only copies Max Torque into it at power-up,
+        // so without this write the old limit stays in force until the bus is power-cycled.
+        // Best-effort like Acc below.
+        let _ = Self::ram_write_with_action(
+            port,
+            motor_id,
+            protocol::RamRegister::TorqueLimit,
+            Bytes::copy_from_slice(&torque.torque_limit.to_le_bytes()),
         )
         .await?;
 

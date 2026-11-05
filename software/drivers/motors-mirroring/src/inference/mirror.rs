@@ -111,7 +111,7 @@ pub fn get_movement_sequence_with_goal(
     };
 
     // Current protection: track direction that causes high current and block it
-    let current_threshold = config.get_current_threshold(motor_id as u8);
+    let current_threshold = config.get_current_threshold(target_bus_id, motor_id as u8);
     if current_threshold > 0 {
         if target.current >= current_threshold {
             // Current is high - determine which direction caused it if not already known

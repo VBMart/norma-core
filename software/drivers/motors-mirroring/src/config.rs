@@ -18,14 +18,19 @@ pub struct MotorConfig {
     /// Per-motor current threshold overrides. Key is motor_id (0-255).
     /// If a motor_id is in this map, its value overrides the default current_threshold.
     pub per_motor_current_threshold: HashMap<u8, u16>,
+    /// Per-bus, per-motor overrides keyed by bus serial. Different arms carry different
+    /// servos on the same motor ids, so a bus entry wins over the global per-motor map.
+    pub per_bus_motor_current_threshold: HashMap<String, HashMap<u8, u16>>,
 }
 
 impl MotorConfig {
-    /// Get the effective current threshold for a specific motor.
-    /// Returns the per-motor override if set, otherwise the default threshold.
-    pub fn get_current_threshold(&self, motor_id: u8) -> u16 {
-        self.per_motor_current_threshold
-            .get(&motor_id)
+    /// Get the effective current threshold for a motor on a bus.
+    /// Order: per-bus override, then per-motor override, then the default threshold.
+    pub fn get_current_threshold(&self, bus_serial: &str, motor_id: u8) -> u16 {
+        self.per_bus_motor_current_threshold
+            .get(bus_serial)
+            .and_then(|m| m.get(&motor_id))
+            .or_else(|| self.per_motor_current_threshold.get(&motor_id))
             .copied()
             .unwrap_or(self.current_threshold)
     }
@@ -53,6 +58,7 @@ impl Default for MotorConfig {
             max_steps: 4096,
             current_threshold: 100, // enabled by default with threshold of 100
             per_motor_current_threshold: HashMap::new(),
+            per_bus_motor_current_threshold: HashMap::new(),
         }
     }
 }
@@ -63,7 +69,27 @@ impl From<&station_iface::config::St3215Config> for MotorConfig {
             current_threshold: config.current_threshold,
             deadband: config.deadband,
             per_motor_current_threshold: config.motor_current_thresholds.clone().unwrap_or_default(),
+            per_bus_motor_current_threshold: config.bus_motor_current_thresholds.clone().unwrap_or_default(),
             ..Default::default()
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn threshold_lookup_prefers_bus_then_motor_then_default() {
+        let mut cfg = MotorConfig::default();
+        cfg.set_motor_current_threshold(2, 300);
+        cfg.per_bus_motor_current_threshold
+            .insert("FOLLOWER".to_string(), HashMap::from([(2u8, 480u16), (3u8, 450u16)]));
+
+        assert_eq!(cfg.get_current_threshold("FOLLOWER", 2), 480);
+        assert_eq!(cfg.get_current_threshold("FOLLOWER", 3), 450);
+        assert_eq!(cfg.get_current_threshold("FOLLOWER", 4), 100);
+        assert_eq!(cfg.get_current_threshold("OTHER", 2), 300);
+        assert_eq!(cfg.get_current_threshold("OTHER", 3), 100);
     }
 }

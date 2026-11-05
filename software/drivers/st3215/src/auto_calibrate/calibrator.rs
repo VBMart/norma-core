@@ -493,15 +493,34 @@ impl ST3215Calibrator {
         Ok(())
     }
 
+    /// Model number of a motor and the number of motors on the bus, from the latest
+    /// inference snapshot. Model is None when unknown; count is 0 when the bus is not seen.
+    fn motor_model_and_bus_size(&self, motor_id: u8) -> (Option<u16>, u8) {
+        let state = self.inference_rx.borrow();
+        let bus = state
+            .buses
+            .iter()
+            .find(|b| b.bus.as_ref().map(|bus| bus.serial_number.as_str()) == Some(&self.target_bus_serial));
+        let model = bus
+            .and_then(|bus| bus.motors.iter().find(|m| m.id == motor_id as u32))
+            .and_then(|m| crate::protocol::get_motor_model_number(&m.state));
+        let count = bus.map(|bus| bus.motors.len() as u8).unwrap_or(0);
+        (model, count)
+    }
+
     pub async fn cleanup_motor(&mut self, motor_id: u8) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        self.send_eeprom_write(motor_id, EepromRegister::MaxTorque.address(), DEFAULT_MAX_TORQUE.to_le_bytes().to_vec()).await?;
-        self.send_eeprom_write(motor_id, EepromRegister::ProtectionCurrent.address(), DEFAULT_PROTECTION_CURRENT.to_le_bytes().to_vec()).await?;
-        self.send_eeprom_write(motor_id, EepromRegister::OverloadTorque.address(), vec![DEFAULT_OVERLOAD_TORQUE]).await?;
+        let (model, bus_motors) = self.motor_model_and_bus_size(motor_id);
+        let torque = torque_preset_for_motor(model, bus_motors, motor_id);
+        info!("Motor {} - Cleanup: model number {:?}, bus motors {}, torque preset {:?}", motor_id, model, bus_motors, torque);
+
+        self.send_eeprom_write(motor_id, EepromRegister::MaxTorque.address(), torque.max_torque.to_le_bytes().to_vec()).await?;
+        self.send_eeprom_write(motor_id, EepromRegister::ProtectionCurrent.address(), torque.protection_current.to_le_bytes().to_vec()).await?;
+        self.send_eeprom_write(motor_id, EepromRegister::OverloadTorque.address(), vec![torque.overload_torque]).await?;
         self.send_eeprom_write(motor_id, EepromRegister::Offset.address(), vec![0,0]).await?;
 
         self.send_write(motor_id, RamRegister::GoalSpeed.address(), vec![0,0]).await?;
         self.send_write(motor_id, RamRegister::Acc.address(), vec![DEFAULT_ACCEL]).await?;
-        self.send_write(motor_id, RamRegister::TorqueLimit.address(), DEFAULT_TORQUE_LIMIT.to_le_bytes().to_vec()).await?;
+        self.send_write(motor_id, RamRegister::TorqueLimit.address(), torque.torque_limit.to_le_bytes().to_vec()).await?;
 
         Ok(())
     }

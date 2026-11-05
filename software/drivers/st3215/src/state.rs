@@ -404,6 +404,17 @@ impl ST3215BusCommunicator {
             .and_then(|bus_bounds| bus_bounds.get(&motor_id).copied())
     }
 
+    /// Motor ids that have calibration bounds on this bus, in ascending order.
+    pub fn get_bounded_motor_ids(&self, bus_serial: &str) -> Vec<u32> {
+        let bounds = self.bounds.read();
+        let mut ids: Vec<u32> = bounds
+            .get(bus_serial)
+            .map(|bus_bounds| bus_bounds.keys().copied().collect())
+            .unwrap_or_default();
+        ids.sort_unstable();
+        ids
+    }
+
     fn update_command_result(
         &self,
         bus_info: &st3215_proto::St3215Bus,

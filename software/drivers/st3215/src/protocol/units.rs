@@ -3,6 +3,19 @@ use super::memory::RamRegister;
 pub const MAX_ANGLE_STEP: u16 = 4095;
 const SIGN_BIT_MASK: u16 = 0x8000;
 
+/// Servo model number address in the Feetech STS/SMS memory table (2 bytes, little-endian).
+/// Addresses 0x00..0x02 hold the firmware version, not the model.
+pub const MODEL_NUMBER_ADDR: u8 = 0x03;
+
+/// Servo model number from the memory snapshot, or None when the snapshot is too short.
+pub fn get_motor_model_number(state: &[u8]) -> Option<u16> {
+    let addr = MODEL_NUMBER_ADDR as usize;
+    if state.len() < addr + 2 {
+        return None;
+    }
+    Some(u16::from_le_bytes([state[addr], state[addr + 1]]))
+}
+
 pub fn normal_position(position: u16) -> u16 {
     if position & SIGN_BIT_MASK != 0 {
         let magnitude = position & MAX_ANGLE_STEP;

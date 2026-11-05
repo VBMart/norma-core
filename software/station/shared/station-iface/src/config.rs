@@ -157,6 +157,23 @@ pub struct St3215Config {
     )]
     pub motor_current_thresholds: Option<std::collections::HashMap<u8, u16>>,
 
+    /// Per-bus, per-motor current threshold overrides, keyed by the bus serial number.
+    /// Takes precedence over `motor-current-thresholds` for that bus. Use it when arms
+    /// with different servos share motor ids. Example in YAML:
+    /// ```yaml
+    /// bus-current-thresholds:
+    ///   5AB0180270:   # SO-ARM102 follower, STS3250 on 2 and 3
+    ///     2: 480
+    ///     3: 450
+    /// ```
+    #[serde(
+        rename = "bus-current-thresholds",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub bus_motor_current_thresholds:
+        Option<std::collections::HashMap<String, std::collections::HashMap<u8, u16>>>,
+
     /// Deadband for mirroring. Minimum distance between current position
     /// and goal to trigger movement. Default is 20.
     #[serde(default = "default_deadband")]
@@ -181,6 +198,7 @@ impl Default for St3215Config {
             enabled: true,
             current_threshold: 100,
             motor_current_thresholds: None,
+            bus_motor_current_thresholds: None,
             deadband: 20,
         }
     }

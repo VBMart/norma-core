@@ -2,6 +2,22 @@ drivers:
   st3215:
     enabled: true
     current-threshold: 100
+    # Mirroring current hold, raw units of 6.5 mA (default 100 = 650 mA). Per bus serial,
+    # because the arms carry different servos on the same motor ids.
+    bus-current-thresholds:
+      # SO-ARM102 follower: STS3250 on shoulder lift (2) and elbow (3), 4.2 A stall.
+      # 480 = 3.1 A, 450 = 2.9 A: just under the servo's own protection current (3.25 A).
+      5AB0180270:
+        2: 480
+        3: 450
+      # ElRobot: all STS3215, 2.7 A stall. 380 = 2.5 A on the lifting joints 2, 3, 4 and the
+      # wrist pitch 6; gripper 8 and the rolls keep the default. Replace the serial with the
+      # ElRobot bus serial shown on its bus card in the viewer, then restart the station.
+      # ELROBOT_SERIAL:
+      #   2: 380
+      #   3: 380
+      #   4: 380
+      #   6: 380
     deadband: 20
   vesc-trampa:
     enabled: true
