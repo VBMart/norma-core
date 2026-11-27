@@ -335,3 +335,97 @@ fn test_sync_write_init_positions() {
     let expected_bytes = Bytes::from_static(&[255, 255, 254, 28, 131, 42, 2, 1, 91, 0, 2, 145, 3, 3, 229, 11, 4, 67, 3, 5, 245, 1, 6, 33, 9, 7, 93, 7, 8, 209, 14, 138]);
     assert_eq!(request.to_bytes(), expected_bytes);
 }
+
+#[tokio::test]
+async fn test_stale_reply_from_other_motor_is_skipped() {
+    // A late reply from motor 7 (to an earlier, timed-out request) is still in the
+    // buffer when we read the reply to a ping of motor 1. The stale packet must be
+    // discarded instead of being reported as this request's answer.
+    let request = packet::ST3215Request::Ping { motor: 1 };
+    let stale = [0xFF, 0xFF, 0x07, 0x02, 0x00, 0xF6];
+    let fresh = [0xFF, 0xFF, 0x01, 0x02, 0x00, 0xFC];
+    let mut stream = Vec::new();
+    stream.extend_from_slice(&stale);
+    stream.extend_from_slice(&fresh);
+    let mut reader = &stream[..];
+    let response = packet::ST3215Response::async_read(&request, &mut reader, 100)
+        .await
+        .unwrap();
+    assert_eq!(
+        response,
+        packet::ST3215Response::Ping {
+            source_bytes: Bytes::copy_from_slice(&fresh),
+        }
+    );
+}
+
+#[tokio::test]
+async fn test_only_stale_reply_is_a_timeout() {
+    // Only a stale reply from another motor arrives: the read must fail as a timeout
+    // (nothing answered us), not as an ID mismatch carrying another motor's data.
+    let request = packet::ST3215Request::Ping { motor: 1 };
+    let stale = [0xFF, 0xFF, 0x07, 0x02, 0x00, 0xF6];
+    let (mut client, mut server) = tokio::io::duplex(64);
+    tokio::io::AsyncWriteExt::write_all(&mut server, &stale).await.unwrap();
+    let result = packet::ST3215Response::async_read(&request, &mut client, 30).await;
+    assert!(
+        matches!(result, Err(super::error::Error::Timeout { .. })),
+        "expected Timeout, got {:?}",
+        result
+    );
+    drop(server);
+}
+
+#[tokio::test]
+async fn test_stale_status_reply_from_same_motor_is_skipped_by_read() {
+    // A late status reply (no data) from motor 1 — e.g. an Action that answered after
+    // its 20 ms window — is still in the buffer when we read 2 bytes from motor 1.
+    // Same ID, so only the data length tells it apart from the real Read reply.
+    let request = packet::ST3215Request::Read {
+        motor: 1,
+        address: 0x2A,
+        length: 2,
+    };
+    let stale = [0xFF, 0xFF, 0x01, 0x02, 0x00, 0xFC];
+    let fresh = [0xFF, 0xFF, 0x01, 0x04, 0x00, 0x12, 0x34, 0xB4];
+    let mut stream = Vec::new();
+    stream.extend_from_slice(&stale);
+    stream.extend_from_slice(&fresh);
+    let mut reader = &stream[..];
+    let response = packet::ST3215Response::async_read(&request, &mut reader, 100)
+        .await
+        .unwrap();
+    assert_eq!(
+        response,
+        packet::ST3215Response::Read {
+            data: Bytes::from_static(&[0x12, 0x34]),
+            source_bytes: Bytes::copy_from_slice(&fresh),
+        }
+    );
+}
+
+#[tokio::test]
+async fn test_stale_read_reply_from_same_motor_is_skipped_by_write() {
+    // A late Read reply (2 data bytes) from motor 1 must not be taken as the
+    // status reply to a Write on motor 1.
+    let request = packet::ST3215Request::Write {
+        motor: 1,
+        address: 0x2A,
+        data: Bytes::from_static(&[0xAB, 0xCD]),
+    };
+    let stale = [0xFF, 0xFF, 0x01, 0x04, 0x00, 0x12, 0x34, 0xB4];
+    let fresh = [0xFF, 0xFF, 0x01, 0x02, 0x00, 0xFC];
+    let mut stream = Vec::new();
+    stream.extend_from_slice(&stale);
+    stream.extend_from_slice(&fresh);
+    let mut reader = &stream[..];
+    let response = packet::ST3215Response::async_read(&request, &mut reader, 100)
+        .await
+        .unwrap();
+    assert_eq!(
+        response,
+        packet::ST3215Response::Write {
+            source_bytes: Bytes::copy_from_slice(&fresh),
+        }
+    );
+}

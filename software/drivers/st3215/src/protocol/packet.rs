@@ -63,6 +63,21 @@ impl ST3215Request {
         }
     }
 
+    /// Number of data bytes a reply to this request carries, or `None` when no single
+    /// reply is expected (broadcast). Used to recognise late replies from the same motor
+    /// that belong to an earlier request of a different shape.
+    fn expected_reply_data_len(&self) -> Option<usize> {
+        match self {
+            Self::Read { length, .. } => Some(*length as usize),
+            Self::Ping { .. }
+            | Self::Write { .. }
+            | Self::RegWrite { .. }
+            | Self::Action { .. }
+            | Self::Reset { .. } => Some(0),
+            Self::SyncWrite { .. } => None,
+        }
+    }
+
     pub fn to_bytes(&self) -> Bytes {
         let data_length = self.data_len();
         let mut packet = BytesMut::with_capacity(data_length as usize + 6);
@@ -257,57 +272,46 @@ impl ST3215Response {
         timeout_ms: u64,
     ) -> Result<Self, Error> {
         let source_packet = request.to_bytes();
-        let mut reply_buffer = BytesMut::with_capacity(256);
+        // One deadline for the whole exchange, so skipping stale frames below can
+        // never stretch a read past `timeout_ms`.
+        let deadline =
+            tokio::time::Instant::now() + std::time::Duration::from_millis(timeout_ms);
 
-        // Read header, searching for 0xFF 0xFF to avoid misaligned reads
-        tokio::time::timeout(std::time::Duration::from_millis(timeout_ms), async {
-            let mut window = [0u8; 2];
-            reader.read_exact(&mut window).await?;
-            while window != HEADER {
-                window[0] = window[1];
-                reader.read_exact(&mut window[1..]).await?;
-            }
-            Ok(())
-        })
-        .await
-        .map_err(|_| Error::Timeout {
-            source_packet: source_packet.clone(),
-            reply_packet: Bytes::new(),
-        })?
-        .map_err(|e| Error::Io {
-            error: e,
-            source_packet: source_packet.clone(),
-        })?;
+        // A reply that arrives after its request timed out stays in the serial buffer.
+        // If it were taken as the answer to the next request, every later read would get
+        // the previous motor's reply and the bus would never resynchronise. Frames from
+        // another motor are therefore discarded and reading continues until our reply
+        // arrives or the deadline passes.
+        let (full_packet, response_data, received_checksum, calculated_checksum, error) = loop {
+            let mut reply_buffer = BytesMut::with_capacity(256);
 
-        reply_buffer.extend_from_slice(&HEADER);
+            // Read header, searching for 0xFF 0xFF to avoid misaligned reads
+            tokio::time::timeout_at(deadline, async {
+                let mut window = [0u8; 2];
+                reader.read_exact(&mut window).await?;
+                while window != HEADER {
+                    window[0] = window[1];
+                    reader.read_exact(&mut window[1..]).await?;
+                }
+                Ok(())
+            })
+            .await
+            .map_err(|_| Error::Timeout {
+                source_packet: source_packet.clone(),
+                reply_packet: Bytes::new(),
+            })?
+            .map_err(|e| Error::Io {
+                error: e,
+                source_packet: source_packet.clone(),
+            })?;
 
-        // Read ID, Length, Error
-        reply_buffer.resize(5, 0);
-        tokio::time::timeout(
-            std::time::Duration::from_millis(timeout_ms),
-            reader.read_exact(&mut reply_buffer[2..]),
-        )
-        .await
-        .map_err(|_| Error::Timeout {
-            source_packet: source_packet.clone(),
-            reply_packet: reply_buffer.clone().freeze(),
-        })?
-        .map_err(|e| Error::Io {
-            error: e,
-            source_packet: source_packet.clone(),
-        })?;
+            reply_buffer.extend_from_slice(&HEADER);
 
-        let motor_id = reply_buffer[2];
-        let length = reply_buffer[3];
-        let error = reply_buffer[4];
-
-        // Read params and checksum
-        let remaining_len = if length >= 2 { length as usize - 1 } else { 0 };
-        if remaining_len > 0 {
-            reply_buffer.resize(5 + remaining_len, 0);
-            tokio::time::timeout(
-                std::time::Duration::from_millis(timeout_ms),
-                reader.read_exact(&mut reply_buffer[5..]),
+            // Read ID, Length, Error
+            reply_buffer.resize(5, 0);
+            tokio::time::timeout_at(
+                deadline,
+                reader.read_exact(&mut reply_buffer[2..]),
             )
             .await
             .map_err(|_| Error::Timeout {
@@ -318,34 +322,76 @@ impl ST3215Response {
                 error: e,
                 source_packet: source_packet.clone(),
             })?;
-        }
 
-        let full_packet = reply_buffer.freeze();
+            let motor_id = reply_buffer[2];
+            let length = reply_buffer[3];
+            let error = reply_buffer[4];
 
-        if full_packet.len() < 6 {
-            return Err(Error::Io {  
-                error: io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    format!("Invalid packet length: expected at least 6 bytes, got {}", full_packet.len())
-                ),
-                source_packet,
-            });
-        }
+            // Read params and checksum
+            let remaining_len = if length >= 2 { length as usize - 1 } else { 0 };
+            if remaining_len > 0 {
+                reply_buffer.resize(5 + remaining_len, 0);
+                tokio::time::timeout_at(
+                    deadline,
+                    reader.read_exact(&mut reply_buffer[5..]),
+                )
+                .await
+                .map_err(|_| Error::Timeout {
+                    source_packet: source_packet.clone(),
+                    reply_packet: reply_buffer.clone().freeze(),
+                })?
+                .map_err(|e| Error::Io {
+                    error: e,
+                    source_packet: source_packet.clone(),
+                })?;
+            }
 
-        let response_data = full_packet.slice(5..full_packet.len() - 1);
-        let received_checksum = full_packet[full_packet.len() - 1];
+            let full_packet = reply_buffer.freeze();
 
-        let packet_for_checksum = &full_packet[2..full_packet.len() - 1];
-        let calculated_checksum = calculate_checksum(packet_for_checksum);
+            if full_packet.len() < 6 {
+                return Err(Error::Io {  
+                    error: io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        format!("Invalid packet length: expected at least 6 bytes, got {}", full_packet.len())
+                    ),
+                    source_packet: source_packet.clone(),
+                });
+            }
 
-        if motor_id != request.motor() && request.motor() != BROADCAST_ID {
-            return Err(Error::MotorIdMismatch {
-                expected: request.motor(),
-                got: motor_id,
-                source_packet,
-                reply_packet: full_packet,
-            });
-        }
+            let response_data = full_packet.slice(5..full_packet.len() - 1);
+            let received_checksum = full_packet[full_packet.len() - 1];
+
+            let packet_for_checksum = &full_packet[2..full_packet.len() - 1];
+            let calculated_checksum = calculate_checksum(packet_for_checksum);
+
+            if motor_id != request.motor() && request.motor() != BROADCAST_ID {
+                log::debug!(
+                    "Discarding stale reply from motor {} while waiting for motor {}: {:02x?}",
+                    motor_id,
+                    request.motor(),
+                    full_packet.as_ref()
+                );
+                continue;
+            }
+
+            // A late reply from the same motor can't be told apart by ID. Its data
+            // length still gives it away when it answered a request of another shape
+            // (e.g. an Action status reply arriving while we wait for a Read).
+            if let Some(expected_len) = request.expected_reply_data_len() {
+                if response_data.len() != expected_len {
+                    log::debug!(
+                        "Discarding stale reply from motor {} with {} data bytes (expected {}): {:02x?}",
+                        motor_id,
+                        response_data.len(),
+                        expected_len,
+                        full_packet.as_ref()
+                    );
+                    continue;
+                }
+            }
+
+            break (full_packet, response_data, received_checksum, calculated_checksum, error);
+        };
 
         if calculated_checksum != received_checksum {
             return Err(Error::ChecksumError {
